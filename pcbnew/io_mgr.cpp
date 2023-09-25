@@ -35,6 +35,7 @@
 #include <plugins/kicad/pcb_plugin.h>
 #include <plugins/legacy/legacy_plugin.h>
 #include <plugins/pcad/pcad_plugin.h>
+#include <plugins/allegro/allegro_plugin.h>
 #include <plugins/altium/altium_circuit_maker_plugin.h>
 #include <plugins/altium/altium_circuit_studio_plugin.h>
 #include <plugins/altium/altium_designer_plugin.h>
@@ -207,6 +208,11 @@ static IO_MGR::REGISTER_PLUGIN registerLegacyPlugin(
         []() -> PLUGIN* { return new LEGACY_PLUGIN; } );
 
 // Keep non-KiCad plugins in alphabetical order
+
+static IO_MGR::REGISTER_PLUGIN registerAllegroPlugin(
+        IO_MGR::ALLEGRO,
+        wxT( "Cadence Allegro" ),
+        []() -> PLUGIN* { return new ALLEGRO_PLUGIN; } );
 
 static IO_MGR::REGISTER_PLUGIN registerAltiumCircuitMakerPlugin(
         IO_MGR::ALTIUM_CIRCUIT_MAKER,
