@@ -304,6 +304,25 @@ struct T_09
     uint32_t TAIL;
 };
 
+// DRC, not fully decoded
+template <MAGIC magic>
+struct T_0A
+{
+    uint16_t t;
+    uint8_t  subtype;
+    uint8_t  layer;
+    uint32_t k;
+    uint32_t next;
+    uint32_t un1; // Always null?
+    COND_FIELD( magic >= A_172, uint32_t, un2 );
+    int32_t  coords[4];
+    uint32_t un4[4];
+    uint32_t un5[5];
+    COND_FIELD( magic >= A_174, uint32_t, un3 );
+
+    uint32_t TAIL;
+};
+
 template <MAGIC magic>
 struct T_0C
 {
@@ -453,6 +472,32 @@ struct T_12
     uint32_t un0;
     COND_FIELD( magic >= A_165, uint32_t, un1 );
     COND_FIELD( magic >= A_174, uint32_t, un2 );
+
+    uint32_t TAIL;
+};
+
+template <MAGIC magic>
+struct T_14
+{
+    uint16_t type;
+    uint8_t  subtype;
+    uint8_t  layer;
+
+    uint32_t k;
+    uint32_t next;
+
+    uint32_t ptr1;
+
+    uint32_t un2;
+    COND_FIELD( magic >= A_172, uint32_t, un3 );
+
+    uint32_t ptr2;
+
+    // Null or sometimes `x03`
+    uint32_t ptr3;
+
+    // `x26`
+    uint32_t ptr4;
 
     uint32_t TAIL;
 };
@@ -699,6 +744,37 @@ struct STACKUP_MATERIAL
     char        kind[20]; // E.g. DIELECTRIC, PLANE, SURFACE, CONDUCTOR
     char        d_f[20];
     char        unknown[20];
+};
+
+// Connection (rat). Draws a line between two connected pads.
+template <MAGIC magic>
+struct T_23
+{
+    uint16_t type;
+    uint8_t  subtype;
+    uint8_t  layer;
+
+    uint32_t k;
+    uint32_t next;
+
+    uint32_t bitmask[2];
+
+    // Matching placed symbol pad (`x32`)
+    uint32_t ptr1;
+
+    // Another `x23`
+    uint32_t ptr2;
+
+    // Another `x32`
+    uint32_t ptr3;
+
+    int32_t coords[5];
+
+    uint32_t un[4];
+    COND_FIELD( magic >= A_164, uint32_t[4], un2 );
+    COND_FIELD( magic >= A_174, uint32_t, un1 );
+
+    uint32_t TAIL;
 };
 
 template <MAGIC magic>
@@ -1004,6 +1080,31 @@ struct T_30
     uint32_t TAIL;
 };
 
+// String graphic
+template <MAGIC magic>
+struct T_31
+{
+    uint16_t t;
+    uint8_t  subtype;
+    uint8_t  layer;
+
+    uint32_t k;
+
+    // Points to x30
+    uint32_t str_graphic_wrapper_ptr;
+
+    int32_t coords[2];
+
+    uint16_t un;
+
+    uint16_t len;
+    COND_FIELD( magic >= A_174, uint32_t, un2 );
+
+    uint32_t TAIL;
+
+    std::string s;
+};
+
 // Symbol pins
 template <MAGIC magic>
 struct T_32
@@ -1038,6 +1139,68 @@ struct T_32
     uint32_t ptr11;
 
     int32_t coords[4];
+
+    uint32_t TAIL;
+};
+
+template <MAGIC magic>
+struct T_33
+{
+    uint16_t t;
+    uint8_t  subtype;
+    uint8_t  layer;
+
+    uint32_t k;
+    uint32_t un1;
+
+    uint32_t ptr1;
+
+    // Some bit field?
+    uint32_t un2;
+    COND_FIELD( magic >= A_172, uint32_t, un4 );
+
+    uint32_t ptr2;
+
+    COND_FIELD( magic >= A_172, uint32_t, ptr7 );
+
+    int32_t coords[2];
+
+    // Points to instance of `x05` or `0x09` (or null).
+    uint32_t ptr3;
+
+    uint32_t ptr4;
+
+    // Null or pointer to (always empty?) string
+    uint32_t ptr5;
+
+    uint32_t ptr6;
+
+    // Occassionally non-zero integers? Maybe bit fields?
+    uint32_t un3[2];
+
+    int32_t bb_coords[4];
+
+    uint32_t TAIL;
+};
+
+// Keepout/keepin/etc.region
+template <MAGIC magic>
+struct T_34
+{
+    uint16_t t;
+    uint8_t  subtype;
+    uint8_t  layer;
+
+    uint32_t k;
+    uint32_t next;
+
+    uint32_t ptr1; // x28
+    COND_FIELD( magic >= A_172, uint32_t, un2 );
+    uint32_t bitmask1;
+    uint32_t ptr2; // x01
+    uint32_t ptr3; // x03
+
+    uint32_t un;
 
     uint32_t TAIL;
 };
@@ -1162,6 +1325,18 @@ struct T_38_FILM
     std::string s;
 };
 
+template <MAGIC magic>
+struct T_39_FILM_LAYER_LIST
+{
+    uint32_t t;
+    uint32_t k;
+    uint32_t parent;
+    uint32_t head;
+    uint16_t x[22];
+
+    uint32_t TAIL;
+};
+
 static_assert( sizeof_allegro_obj<T_38_FILM<A_160>>() == 64 );
 static_assert( sizeof_allegro_obj<T_38_FILM<A_165>>() == 64 );
 static_assert( sizeof_allegro_obj<T_38_FILM<A_166>>() == 52 );
@@ -1181,6 +1356,25 @@ struct T_3A_FILM_LAYER_LIST_NODE
     COND_FIELD( magic >= A_174, uint32_t, un1 );
 
     uint32_t TAIL;
+};
+
+// List of SI models
+template <MAGIC magic>
+struct T_3B
+{
+    uint16_t t;
+    uint16_t subtype;
+
+    uint32_t len;
+    char     name[128];
+    char     type[32];
+    uint32_t un1;
+    uint32_t un2;
+    COND_FIELD( magic >= A_172, uint32_t, un3 );
+
+    uint32_t TAIL;
+
+    std::string model_str;
 };
 
 }; // namespace ALLEGRO

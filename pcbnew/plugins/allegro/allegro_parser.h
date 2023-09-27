@@ -39,9 +39,12 @@ private:
     static uint32_t Parse1D( ALLEGRO_PARSER& parser );
     static uint32_t Parse1F( ALLEGRO_PARSER& parser );
     static uint32_t Parse21( ALLEGRO_PARSER& parser );
+    static uint32_t Parse27( ALLEGRO_PARSER& parser );
     static uint32_t Parse2A( ALLEGRO_PARSER& parser );
+    static uint32_t Parse31( ALLEGRO_PARSER& parser );
     static uint32_t Parse35( ALLEGRO_PARSER& parser );
     static uint32_t Parse36( ALLEGRO_PARSER& parser );
+    static uint32_t Parse3B( ALLEGRO_PARSER& parser );
 
     typedef uint32_t ( *PARSER_FUNC )( ALLEGRO_PARSER& parser );
 
@@ -67,7 +70,7 @@ private:
         // 0x09
         &DefaultParser<ALLEGRO::T_09>,
         // 0x0A
-        nullptr,
+        &DefaultParser<ALLEGRO::T_0A>,
         // 0x0B
         nullptr,
         // 0x0C
@@ -87,7 +90,7 @@ private:
         // 0x13
         nullptr,
         // 0x14
-        nullptr,
+        &DefaultParser<ALLEGRO::T_14>,
         // 0x15
         &DefaultParser<ALLEGRO::T_15>,
         // 0x16
@@ -117,7 +120,7 @@ private:
         // 0x22
         nullptr,
         // 0x23
-        nullptr,
+        &DefaultParser<ALLEGRO::T_23>,
         // 0x24
         nullptr,
         // 0x25
@@ -125,7 +128,7 @@ private:
         // 0x26
         &DefaultParser<ALLEGRO::T_26>,
         // 0x27
-        nullptr,
+        &Parse27,
         // 0x28
         &DefaultParser<ALLEGRO::T_28>,
         // 0x29
@@ -145,13 +148,13 @@ private:
         // 0x30
         &DefaultParser<ALLEGRO::T_30>,
         // 0x31
-        nullptr,
+        &Parse31,
         // 0x32
         &DefaultParser<ALLEGRO::T_32>,
         // 0x33
-        nullptr,
+        &DefaultParser<ALLEGRO::T_33>,
         // 0x34
-        nullptr,
+        &DefaultParser<ALLEGRO::T_34>,
         // 0x35
         &Parse35,
         // 0x36
@@ -161,9 +164,11 @@ private:
         // 0x38
         &DefaultParser<ALLEGRO::T_38_FILM>,
         // 0x39
-        nullptr,
+        &DefaultParser<ALLEGRO::T_39_FILM_LAYER_LIST>,
         // 0x3A
         &DefaultParser<ALLEGRO::T_3A_FILM_LAYER_LIST_NODE>,
+        // 0x3B
+        &Parse3B,
     };
 
     BOARD*              m_board;
@@ -445,6 +450,13 @@ uint32_t ALLEGRO_PARSER<magic>::Parse21( ALLEGRO_PARSER& parser )
 };
 
 template <ALLEGRO::MAGIC magic>
+uint32_t ALLEGRO_PARSER<magic>::Parse27( ALLEGRO_PARSER& parser )
+{
+    parser.m_curAddr = (char*) parser.m_baseAddr + parser.m_header->x27_end_offset - 1;
+    return 0;
+}
+
+template <ALLEGRO::MAGIC magic>
 uint32_t ALLEGRO_PARSER<magic>::Parse2A( ALLEGRO_PARSER& parser )
 {
     ALLEGRO::T_2A x2A_inst;
@@ -487,6 +499,21 @@ uint32_t ALLEGRO_PARSER<magic>::Parse2A( ALLEGRO_PARSER& parser )
     x2A_inst.k = *static_cast<uint32_t*>( parser.m_curAddr );
     parser.Skip( 4 );
     // ( fs.x2A_map )[x2A_inst.k] = x2A_inst;
+    return 0;
+}
+
+template <ALLEGRO::MAGIC magic>
+uint32_t ALLEGRO_PARSER<magic>::Parse31( ALLEGRO_PARSER& parser )
+{
+    ALLEGRO::T_31<magic>* i = static_cast<ALLEGRO::T_31<magic>*>( parser.m_curAddr );
+    uint32_t              k = ALLEGRO_PARSER<magic>::DefaultParser<ALLEGRO::T_31>( parser );
+
+    if( i->len > 0 )
+    {
+        uint32_t len = round_to_word( i->len );
+        parser.Skip( len );
+    }
+
     return 0;
 }
 
@@ -626,6 +653,17 @@ uint32_t ALLEGRO_PARSER<magic>::Parse36( ALLEGRO_PARSER& parser )
     }
 
     // fs.x36_map[inst.k] = upgrade<version, A_174>( inst );
+    return 0;
+}
+
+template <ALLEGRO::MAGIC magic>
+uint32_t ALLEGRO_PARSER<magic>::Parse3B( ALLEGRO_PARSER& parser )
+{
+    ALLEGRO::T_3B<magic>* i = (ALLEGRO::T_3B<magic>*) parser.m_curAddr;
+
+    parser.Skip( ALLEGRO::sizeof_allegro_obj<ALLEGRO::T_3B<magic>>() );
+    parser.Skip( round_to_word( i->len ) );
+
     return 0;
 }
 
