@@ -182,6 +182,46 @@ struct T_04
     uint32_t TAIL;
 };
 
+// Line (composed of multiple line segments, x01, x15, x16, and x17)
+template <MAGIC magic>
+struct T_05
+{
+    uint16_t t;
+    uint8_t  subtype;
+    uint8_t  layer;
+
+    uint32_t k;
+
+    uint32_t ptr0;
+
+    // Points to `x04` (net/shape pair)
+    uint32_t ptr1;
+
+    uint32_t un1[2];
+
+    // Points to one of: `x04`, `x05`, `0x09`, `x28`, `x2E`, `x32`, `x33` or
+    // null.
+    uint32_t ptr2[2];
+
+    uint32_t un2;
+
+    // Points to one of: `x04`, `x05`, `0x09`, `x28`, `x2E`, `x32`, `x33`.
+    uint32_t ptr3[2];
+
+    COND_FIELD( magic >= A_172, uint32_t, un4[3] );
+
+    // Points to one of: `0x01`, `x15, `x16`, `x17`.
+    uint32_t first_segment_ptr;
+
+    // Points to instance of `0x03` (nullable).
+    uint32_t ptr5;
+
+    // Null
+    uint32_t un3;
+
+    uint32_t TAIL;
+};
+
 template <MAGIC magic>
 struct T_06
 {
@@ -702,6 +742,27 @@ struct T_1D
     uint32_t TAIL;
 };
 
+struct T_1E_HEADER
+{
+    uint32_t t;
+    uint32_t k;
+    uint32_t un1;
+
+    uint16_t un2;
+    uint16_t un3;
+
+    uint32_t str_ptr;
+
+    uint32_t size;
+};
+
+// Model info
+struct T_1E
+{
+    T_1E_HEADER hdr;
+    char*       s;
+};
+
 template <MAGIC magic>
 struct T_1F
 {
@@ -773,6 +834,17 @@ struct T_23
     uint32_t un[4];
     COND_FIELD( magic >= A_164, uint32_t[4], un2 );
     COND_FIELD( magic >= A_174, uint32_t, un1 );
+
+    uint32_t TAIL;
+};
+
+template <MAGIC magic>
+struct T_24
+{
+    uint32_t t;
+    uint32_t k;
+    uint32_t un[11];
+    COND_FIELD( magic >= A_172, uint32_t, un1 );
 
     uint32_t TAIL;
 };
@@ -1022,6 +1094,17 @@ struct T_2D
 
     // x26 instance indicating group membership
     uint32_t group_assignment_ptr;
+
+    uint32_t TAIL;
+};
+
+template <MAGIC magic>
+struct T_2E
+{
+    uint32_t t;
+    uint32_t k;
+    uint32_t un[7];
+    COND_FIELD( magic >= A_172, uint32_t, un1 );
 
     uint32_t TAIL;
 };
@@ -1375,6 +1458,21 @@ struct T_3B
     uint32_t TAIL;
 
     std::string model_str;
+};
+
+// Pair (or very occassionally three-tuple)
+// Usually points to two nets (diffpair) or two symbol pads (connected pads)
+template <MAGIC magic>
+struct T_3C
+{
+    uint32_t t;
+    uint32_t k;
+    COND_FIELD( magic >= A_174, uint32_t, un );
+    uint32_t size;
+
+    uint32_t TAIL;
+
+    std::vector<uint32_t> ptrs;
 };
 
 }; // namespace ALLEGRO

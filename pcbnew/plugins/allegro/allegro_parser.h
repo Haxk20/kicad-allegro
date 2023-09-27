@@ -18,7 +18,7 @@
 #include "allegro_file.h"
 #include "allegro_structs.h"
 
-#define PRINT_ALL_ITEMS 1
+#define PRINT_ALL_ITEMS 0
 
 template <ALLEGRO::MAGIC magic>
 class ALLEGRO_PARSER
@@ -28,8 +28,12 @@ public:
     void Parse();
 
 private:
+    void    BuildBoard();
+    uint8_t GetCopperLayerCount();
+
     void Skip( std::size_t n );
     void Log( const char* fmt... );
+    bool IsType( uint32_t k, uint8_t t );
 
     template <template <ALLEGRO::MAGIC> typename T>
     static uint32_t DefaultParser( ALLEGRO_PARSER& parser );
@@ -37,6 +41,7 @@ private:
     static uint32_t Parse03( ALLEGRO_PARSER& parser );
     static uint32_t Parse1C( ALLEGRO_PARSER& parser );
     static uint32_t Parse1D( ALLEGRO_PARSER& parser );
+    static uint32_t Parse1E( ALLEGRO_PARSER& parser );
     static uint32_t Parse1F( ALLEGRO_PARSER& parser );
     static uint32_t Parse21( ALLEGRO_PARSER& parser );
     static uint32_t Parse27( ALLEGRO_PARSER& parser );
@@ -45,6 +50,7 @@ private:
     static uint32_t Parse35( ALLEGRO_PARSER& parser );
     static uint32_t Parse36( ALLEGRO_PARSER& parser );
     static uint32_t Parse3B( ALLEGRO_PARSER& parser );
+    static uint32_t Parse3C( ALLEGRO_PARSER& parser );
 
     typedef uint32_t ( *PARSER_FUNC )( ALLEGRO_PARSER& parser );
 
@@ -60,7 +66,7 @@ private:
         // 0x04
         &DefaultParser<ALLEGRO::T_04>,
         // 0x05
-        nullptr,
+        &DefaultParser<ALLEGRO::T_05>,
         // 0x06
         &DefaultParser<ALLEGRO::T_06>,
         // 0x07
@@ -110,7 +116,7 @@ private:
         // 0x1D
         &Parse1D,
         // 0x1E
-        nullptr,
+        &Parse1E,
         // 0x1F
         &Parse1F,
         // 0x20
@@ -122,7 +128,7 @@ private:
         // 0x23
         &DefaultParser<ALLEGRO::T_23>,
         // 0x24
-        nullptr,
+        &DefaultParser<ALLEGRO::T_24>,
         // 0x25
         nullptr,
         // 0x26
@@ -142,7 +148,7 @@ private:
         // 0x2D
         &DefaultParser<ALLEGRO::T_2D>,
         // 0x2E
-        nullptr,
+        &DefaultParser<ALLEGRO::T_2E>,
         // 0x2F
         nullptr,
         // 0x30
@@ -169,6 +175,8 @@ private:
         &DefaultParser<ALLEGRO::T_3A_FILM_LAYER_LIST_NODE>,
         // 0x3B
         &Parse3B,
+        // 0x3C
+        &Parse3C,
     };
 
     BOARD*              m_board;
@@ -180,6 +188,9 @@ private:
 
     std::vector<std::tuple<uint32_t, uint32_t>> m_layers;
     std::map<uint32_t, char*>                   m_strings;
+    std::map<uint32_t, ALLEGRO::T_2A>           m_t2A_map;
+    std::map<uint32_t, ALLEGRO::T_1E>           m_t1E_map;
+
 
 #if BOOST_VERSION >= 108100
     boost::unordered_flat_map<uint32_t, void*> m_ptrs;
@@ -247,7 +258,6 @@ void ALLEGRO_PARSER<magic>::Parse()
 
 
     // All other objects
-    Log( "Starting to parse" );
     while( m_curAddr < (char*) m_baseAddr + size && *static_cast<uint8_t*>( m_curAddr ) != 0x00 )
     {
         uint8_t t = *static_cast<uint8_t*>( m_curAddr );
@@ -267,6 +277,8 @@ void ALLEGRO_PARSER<magic>::Parse()
             break;
         }
     }
+
+    BuildBoard();
 }
 
 template <ALLEGRO::MAGIC magic>
@@ -391,6 +403,24 @@ uint32_t ALLEGRO_PARSER<magic>::Parse1D( ALLEGRO_PARSER<magic>& parser )
 };
 
 template <ALLEGRO::MAGIC magic>
+uint32_t ALLEGRO_PARSER<magic>::Parse1E( ALLEGRO_PARSER<magic>& parser )
+{
+    ALLEGRO::T_1E* x1E_inst = new ALLEGRO::T_1E;
+    memcpy( x1E_inst, parser.m_curAddr, sizeof( ALLEGRO::T_1E_HEADER ) );
+    parser.Skip( sizeof( ALLEGRO::T_1E_HEADER ) );
+    // f.read((char*)x1E_inst, sizeof(x1E_hdr));
+    x1E_inst->s = (char*) parser.m_curAddr;
+    parser.Skip( round_to_word( x1E_inst->hdr.size ) );
+    // f.read(x1E_inst->s, round_to_word(x1E_inst->hdr.size));
+    parser.m_t1E_map[x1E_inst->hdr.k] = *x1E_inst;
+    if( magic >= ALLEGRO::A_172 )
+    {
+        parser.Skip( 4 );
+    }
+    return 0;
+}
+
+template <ALLEGRO::MAGIC magic>
 uint32_t ALLEGRO_PARSER<magic>::Parse1F( ALLEGRO_PARSER<magic>& parser )
 {
     ALLEGRO::T_1F<magic>* i = static_cast<ALLEGRO::T_1F<magic>*>( parser.m_curAddr );
@@ -498,7 +528,7 @@ uint32_t ALLEGRO_PARSER<magic>::Parse2A( ALLEGRO_PARSER& parser )
     // f.read((char*)&x2A_inst.k, 4);
     x2A_inst.k = *static_cast<uint32_t*>( parser.m_curAddr );
     parser.Skip( 4 );
-    // ( fs.x2A_map )[x2A_inst.k] = x2A_inst;
+    parser.m_t2A_map[x2A_inst.k] = x2A_inst;
     return 0;
 }
 
@@ -668,6 +698,131 @@ uint32_t ALLEGRO_PARSER<magic>::Parse3B( ALLEGRO_PARSER& parser )
 }
 
 template <ALLEGRO::MAGIC magic>
+uint32_t ALLEGRO_PARSER<magic>::Parse3C( ALLEGRO_PARSER& parser )
+{
+    ALLEGRO::T_3C<magic>* i = static_cast<ALLEGRO::T_3C<magic>*>( parser.m_curAddr );
+    uint32_t              k = ALLEGRO_PARSER<magic>::DefaultParser<ALLEGRO::T_3C>( parser );
+
+    parser.Skip( i->size * 4 );
+
+    return 0;
+}
+
+template <ALLEGRO::MAGIC magic>
+uint8_t ALLEGRO_PARSER<magic>::GetCopperLayerCount()
+{
+    std::tuple<uint32_t, uint32_t> tup = m_layers[4];
+    uint32_t                       ptr = std::get<1>( tup );
+
+    if( m_t2A_map.count( ptr ) > 0 )
+    {
+        const ALLEGRO::T_2A* x = &m_t2A_map.at( ptr );
+        if( x->references )
+        {
+            return x->reference_entries.size();
+        }
+        else
+        {
+            return x->local_entries.size();
+        }
+    }
+    else
+    {
+        wxLogMessage( "Unable to determine layer count" );
+        return -1;
+    }
+}
+
+template <ALLEGRO::MAGIC magic>
+void ALLEGRO_PARSER<magic>::BuildBoard()
+{
+    m_board->SetCopperLayerCount( GetCopperLayerCount() );
+
+    ALLEGRO::T_1B<magic>* i = static_cast<ALLEGRO::T_1B<magic>*>( m_ptrs[m_header->ll_x1B.head] );
+    if( i != nullptr )
+    {
+        do
+        {
+            if( i->ptr1 != 0 )
+            {
+                ALLEGRO::T_04<magic>* i04 = static_cast<ALLEGRO::T_04<magic>*>( m_ptrs[i->ptr1] );
+                do
+                {
+                    uint32_t k = i04->ptr2;
+                    while( true )
+                    {
+                        if( IsType( k, 0x33 ) )
+                        {
+                            ALLEGRO::T_33<magic>* i =
+                                    static_cast<ALLEGRO::T_33<magic>*>( m_ptrs[k] );
+                            // auto& i = fs->get_x33( k );
+                            // printf("- - Found x33 w/ key = 0x %08X\n", ntohl(k));
+                            k = i->un1;
+                        }
+                        else if( IsType( k, 0x32 ) )
+                        {
+                            ALLEGRO::T_32<magic>* i =
+                                    static_cast<ALLEGRO::T_32<magic>*>( m_ptrs[k] );
+                            // printf("- - Found x32 w/ key = 0x %08X\n", ntohl(k));
+                            k = i->un1;
+                        }
+                        else if( IsType( k, 0x2E ) )
+                        {
+                            ALLEGRO::T_2E<magic>* i =
+                                    static_cast<ALLEGRO::T_2E<magic>*>( m_ptrs[k] );
+                            // printf("- - Found x2E w/ key = 0x %08X\n", ntohl(k));
+                            k = i->un[0];
+                        }
+                        else if( IsType( k, 0x28 ) )
+                        {
+                            ALLEGRO::T_28<magic>* i =
+                                    static_cast<ALLEGRO::T_28<magic>*>( m_ptrs[k] );
+                            k = i->un1;
+                        }
+                        else if( IsType( k, 0x1B ) )
+                        {
+                            break;
+                        }
+                        else if( IsType( k, 0x0E ) )
+                        {
+                            ALLEGRO::T_0E<magic>* i =
+                                    static_cast<ALLEGRO::T_0E<magic>*>( m_ptrs[k] );
+                            k = i->un[0];
+                        }
+                        else if( IsType( k, 0x05 ) )
+                        {
+                            ALLEGRO::T_05<magic>* i =
+                                    static_cast<ALLEGRO::T_05<magic>*>( m_ptrs[k] );
+                            k = i->ptr0;
+                        }
+                        else if( IsType( k, 0x04 ) )
+                        {
+                            break;
+                        }
+                        else
+                        {
+                            wxLogMessage( "Unexpected key = 0x %08X :(", ntohl( k ) );
+                            break;
+                        }
+                    }
+
+                    if( i04->next == i->k )
+                    {
+                        break;
+                    }
+                    else
+                    {
+                        i04 = static_cast<ALLEGRO::T_04<magic>*>( m_ptrs[i04->next] );
+                    }
+                } while( true );
+            }
+
+            i = static_cast<ALLEGRO::T_1B<magic>*>( m_ptrs[i->next] );
+        } while( i->next != m_header->ll_x1B.tail );
+    }
+}
+
+template <ALLEGRO::MAGIC magic>
 void ALLEGRO_PARSER<magic>::Skip( std::size_t n )
 {
     m_curAddr = (void*) ( ( (char*) m_curAddr ) + n );
@@ -683,6 +838,12 @@ void ALLEGRO_PARSER<magic>::Log( const char* fmt... )
     wxVLogMessage( fmt, args );
 
     va_end( args );
+}
+
+template <ALLEGRO::MAGIC magic>
+bool ALLEGRO_PARSER<magic>::IsType( uint32_t k, uint8_t t )
+{
+    return ( m_ptrs.count( k ) > 0 ) && ( *(uint8_t*) m_ptrs[k] == t );
 }
 
 #endif // ALLEGRO_PARSER_H_

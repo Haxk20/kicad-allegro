@@ -45,7 +45,13 @@ BOARD* ALLEGRO_PLUGIN::LoadBoard( const wxString& aFileName, BOARD* aAppendToMe,
                                   const STRING_UTF8_MAP* aProperties, PROJECT* aProject,
                                   PROGRESS_REPORTER* aProgressReporter )
 {
-    m_board = new BOARD();
+    // FIXME: What is the intent of appending to a board?
+    m_board = aAppendToMe ? aAppendToMe : new BOARD();
+
+    if( !aAppendToMe )
+    {
+        m_board->SetFileName( aFileName );
+    }
 
     ALLEGRO_FILE allegroBrdFile( aFileName );
     ALLEGRO_PCB  pcb( m_board, aProgressReporter );
