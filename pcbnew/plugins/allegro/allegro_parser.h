@@ -9,6 +9,7 @@
 #else
 #include <unordered_map>
 #endif
+#include <optional>
 
 #include <wx/log.h>
 
@@ -33,11 +34,12 @@ public:
 private:
     void    BuildBoard();
     uint8_t GetCopperLayerCount();
-    void    AddTrack( const ALLEGRO::T_05<magic>& i05 );
+    void    AddTrack( const ALLEGRO::T_1B<magic>& i1B, const ALLEGRO::T_05<magic>& i05 );
 
-    void Skip( std::size_t n );
-    void Log( const char* fmt... );
-    bool IsType( uint32_t k, uint8_t t );
+    void                    Skip( std::size_t n );
+    void                    Log( const char* fmt... );
+    bool                    IsType( uint32_t k, uint8_t t );
+    std::optional<wxString> StringLookup( uint32_t k );
 
     template <template <ALLEGRO::MAGIC> typename T>
     static uint32_t DefaultParser( ALLEGRO_PARSER& parser );
@@ -753,9 +755,26 @@ uint8_t ALLEGRO_PARSER<magic>::GetCopperLayerCount()
 }
 
 template <ALLEGRO::MAGIC magic>
-void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_05<magic>& i05 )
+void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>& i1B,
+                                      const ALLEGRO::T_05<magic>& i05 )
 {
     uint32_t k = i05.first_segment_ptr;
+
+    NETINFO_ITEM*           netinfo = nullptr;
+    std::optional<wxString> netname = StringLookup( i1B.net_name );
+    if( netname )
+    {
+        if( NETINFO_ITEM* item = m_board->FindNet( *netname ) )
+        {
+            netinfo = item;
+        }
+        else
+        {
+            item = new NETINFO_ITEM( m_board, *netname, m_board->GetNetCount() + 1 );
+            m_board->Add( item, ADD_MODE::APPEND );
+            netinfo = item;
+        }
+    }
 
     while( true )
     {
@@ -781,7 +800,7 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_05<magic>& i05 )
             arc->SetStart( start );
             arc->SetMid( mid );
             arc->SetEnd( end );
-            // arc->SetNet( getOrAddNetItem( netname ) );
+            arc->SetNet( netinfo );
 
             m_board->Add( arc.release(), ADD_MODE::APPEND );
 
@@ -803,7 +822,7 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_05<magic>& i05 )
             track->SetWidth( scale( i15->width ) );
             track->SetStart( start );
             track->SetEnd( end );
-            // track->SetNet( getOrAddNetItem( netname ) );
+            track->SetNet( netinfo );
 
             m_board->Add( track.release(), ADD_MODE::APPEND );
 
@@ -825,7 +844,7 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_05<magic>& i05 )
             track->SetWidth( scale( i16->width ) );
             track->SetStart( start );
             track->SetEnd( end );
-            // track->SetNet( getOrAddNetItem( netname ) );
+            track->SetNet( netinfo );
 
             m_board->Add( track.release(), ADD_MODE::APPEND );
 
@@ -847,7 +866,7 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_05<magic>& i05 )
             track->SetWidth( scale( i17->width ) );
             track->SetStart( start );
             track->SetEnd( end );
-            // track->SetNet( getOrAddNetItem( netname ) );
+            track->SetNet( netinfo );
 
             m_board->Add( track.release(), ADD_MODE::APPEND );
 
@@ -918,11 +937,11 @@ void ALLEGRO_PARSER<magic>::BuildBoard()
                         }
                         else if( IsType( k, 0x05 ) )
                         {
-                            ALLEGRO::T_05<magic>* i =
+                            ALLEGRO::T_05<magic>* i05 =
                                     static_cast<ALLEGRO::T_05<magic>*>( m_ptrs[k] );
-                            AddTrack( *i );
+                            AddTrack( *i, *i05 );
 
-                            k = i->ptr0;
+                            k = i05->ptr0;
                         }
                         else if( IsType( k, 0x04 ) )
                         {
@@ -973,6 +992,16 @@ template <ALLEGRO::MAGIC magic>
 bool ALLEGRO_PARSER<magic>::IsType( uint32_t k, uint8_t t )
 {
     return ( m_ptrs.count( k ) > 0 ) && ( *(uint8_t*) m_ptrs[k] == t );
+}
+
+template <ALLEGRO::MAGIC magic>
+std::optional<wxString> ALLEGRO_PARSER<magic>::StringLookup( uint32_t k )
+{
+    if( m_strings.count( k ) > 0 )
+    {
+        return wxString( m_strings[k] );
+    }
+    return {};
 }
 
 #endif // ALLEGRO_PARSER_H_
