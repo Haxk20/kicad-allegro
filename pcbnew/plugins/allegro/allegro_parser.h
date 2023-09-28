@@ -12,7 +12,10 @@
 
 #include <wx/log.h>
 
-#include "board.h"
+#include <board.h>
+#include <layer_ids.h>
+#include <pcb_track.h>
+#include <trigo.h>
 
 #include "allegro_elem_parsers.h"
 #include "allegro_file.h"
@@ -30,6 +33,7 @@ public:
 private:
     void    BuildBoard();
     uint8_t GetCopperLayerCount();
+    void    AddTrack( const ALLEGRO::T_05<magic>& i05 );
 
     void Skip( std::size_t n );
     void Log( const char* fmt... );
@@ -210,6 +214,16 @@ uint32_t round_to_word( uint32_t len )
     {
         return len;
     }
+}
+
+double cfp_to_double( ALLEGRO::CADENCE_FP r )
+{
+    ALLEGRO::CADENCE_FP swapped;
+    swapped.x = r.y;
+    swapped.y = r.x;
+    double g;
+    std::memcpy( &g, &swapped, 8 );
+    return g;
 }
 
 // Implementation in header file is necessary because of templating.
@@ -734,6 +748,114 @@ uint8_t ALLEGRO_PARSER<magic>::GetCopperLayerCount()
 }
 
 template <ALLEGRO::MAGIC magic>
+void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_05<magic>& i05 )
+{
+    uint32_t k = i05.first_segment_ptr;
+
+    while( true )
+    {
+        if( IsType( k, 0x01 ) )
+        {
+            ALLEGRO::T_01<magic>* i01 = static_cast<ALLEGRO::T_01<magic>*>( m_ptrs[k] );
+
+            double r = cfp_to_double( i01->r );
+
+            VECTOR2I start, end, center, mid;
+            start.x = i01->coords[0];
+            start.y = i01->coords[1];
+            end.x = i01->coords[2];
+            end.y = i01->coords[3];
+            center.x = (int32_t) cfp_to_double( i01->x );
+            center.y = (int32_t) cfp_to_double( i01->y );
+            mid = CalcArcMid( start, end, center );
+
+            std::unique_ptr<PCB_ARC> arc = std::make_unique<PCB_ARC>( m_board );
+
+            arc->SetLayer( (PCB_LAYER_ID) ( ( (int) F_Cu ) + i05.layer ) );
+            arc->SetWidth( i01->width );
+            arc->SetStart( start );
+            arc->SetMid( mid );
+            arc->SetEnd( end );
+            // arc->SetNet( getOrAddNetItem( netname ) );
+
+            m_board->Add( arc.release(), ADD_MODE::APPEND );
+
+            k = i01->next;
+        }
+        else if( IsType( k, 0x15 ) )
+        {
+            ALLEGRO::T_15<magic>* i15 = static_cast<ALLEGRO::T_15<magic>*>( m_ptrs[k] );
+
+            VECTOR2D start, end;
+            start.x = i15->coords[0];
+            start.y = i15->coords[1];
+            end.x = i15->coords[2];
+            end.y = i15->coords[3];
+
+            std::unique_ptr<PCB_TRACK> track = std::make_unique<PCB_TRACK>( m_board );
+
+            track->SetLayer( (PCB_LAYER_ID) ( ( (int) F_Cu ) + i05.layer ) );
+            track->SetWidth( i15->width );
+            track->SetStart( start );
+            track->SetEnd( end );
+            // track->SetNet( getOrAddNetItem( netname ) );
+
+            m_board->Add( track.release(), ADD_MODE::APPEND );
+
+            k = i15->next;
+        }
+        else if( IsType( k, 0x16 ) )
+        {
+            ALLEGRO::T_16<magic>* i16 = static_cast<ALLEGRO::T_16<magic>*>( m_ptrs[k] );
+
+            VECTOR2D start, end;
+            start.x = i16->coords[0];
+            start.y = i16->coords[1];
+            end.x = i16->coords[2];
+            end.y = i16->coords[3];
+
+            std::unique_ptr<PCB_TRACK> track = std::make_unique<PCB_TRACK>( m_board );
+
+            track->SetLayer( (PCB_LAYER_ID) ( ( (int) F_Cu ) + i05.layer ) );
+            track->SetWidth( i16->width );
+            track->SetStart( start );
+            track->SetEnd( end );
+            // track->SetNet( getOrAddNetItem( netname ) );
+
+            m_board->Add( track.release(), ADD_MODE::APPEND );
+
+            k = i16->next;
+        }
+        else if( IsType( k, 0x17 ) )
+        {
+            ALLEGRO::T_17<magic>* i17 = static_cast<ALLEGRO::T_17<magic>*>( m_ptrs[k] );
+
+            VECTOR2D start, end;
+            start.x = i17->coords[0];
+            start.y = i17->coords[1];
+            end.x = i17->coords[2];
+            end.y = i17->coords[3];
+
+            std::unique_ptr<PCB_TRACK> track = std::make_unique<PCB_TRACK>( m_board );
+
+            track->SetLayer( (PCB_LAYER_ID) ( ( (int) F_Cu ) + i05.layer ) );
+            track->SetWidth( i17->width );
+            track->SetStart( start );
+            track->SetEnd( end );
+            // track->SetNet( getOrAddNetItem( netname ) );
+
+            m_board->Add( track.release(), ADD_MODE::APPEND );
+
+            k = i17->next;
+        }
+        else
+        {
+            break;
+        }
+    }
+}
+
+template <ALLEGRO::MAGIC magic>
 void ALLEGRO_PARSER<magic>::BuildBoard()
 {
     m_board->SetCopperLayerCount( GetCopperLayerCount() );
@@ -793,6 +915,8 @@ void ALLEGRO_PARSER<magic>::BuildBoard()
                         {
                             ALLEGRO::T_05<magic>* i =
                                     static_cast<ALLEGRO::T_05<magic>*>( m_ptrs[k] );
+                            AddTrack( *i );
+
                             k = i->ptr0;
                         }
                         else if( IsType( k, 0x04 ) )
