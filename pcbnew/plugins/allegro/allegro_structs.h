@@ -820,6 +820,17 @@ struct STACKUP_MATERIAL
     char        unknown[20];
 };
 
+template <MAGIC magic>
+struct T_22
+{
+    uint32_t t;
+    uint32_t k;
+    COND_FIELD( magic >= A_172, uint32_t, un1 );
+    uint32_t un[8];
+
+    uint32_t TAIL;
+};
+
 // Connection (rat). Draws a line between two connected pads.
 template <MAGIC magic>
 struct T_23

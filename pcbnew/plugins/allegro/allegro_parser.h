@@ -128,7 +128,7 @@ private:
         // 0x21
         &Parse21,
         // 0x22
-        nullptr,
+        &DefaultParser<ALLEGRO::T_22>,
         // 0x23
         &DefaultParser<ALLEGRO::T_23>,
         // 0x24
