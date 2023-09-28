@@ -226,6 +226,11 @@ double cfp_to_double( ALLEGRO::CADENCE_FP r )
     return g;
 }
 
+inline int scale( int x )
+{
+    return x * 100;
+}
+
 // Implementation in header file is necessary because of templating.
 
 template <ALLEGRO::MAGIC magic>
@@ -761,18 +766,18 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_05<magic>& i05 )
             double r = cfp_to_double( i01->r );
 
             VECTOR2I start, end, center, mid;
-            start.x = i01->coords[0];
-            start.y = i01->coords[1];
-            end.x = i01->coords[2];
-            end.y = i01->coords[3];
-            center.x = (int32_t) cfp_to_double( i01->x );
-            center.y = (int32_t) cfp_to_double( i01->y );
+            start.x = scale( i01->coords[0] );
+            start.y = scale( i01->coords[1] );
+            end.x = scale( i01->coords[2] );
+            end.y = scale( i01->coords[3] );
+            center.x = scale( (int32_t) cfp_to_double( i01->x ) );
+            center.y = scale( (int32_t) cfp_to_double( i01->y ) );
             mid = CalcArcMid( start, end, center );
 
             std::unique_ptr<PCB_ARC> arc = std::make_unique<PCB_ARC>( m_board );
 
             arc->SetLayer( (PCB_LAYER_ID) ( ( (int) F_Cu ) + i05.layer ) );
-            arc->SetWidth( i01->width );
+            arc->SetWidth( scale( i01->width ) );
             arc->SetStart( start );
             arc->SetMid( mid );
             arc->SetEnd( end );
@@ -787,15 +792,15 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_05<magic>& i05 )
             ALLEGRO::T_15<magic>* i15 = static_cast<ALLEGRO::T_15<magic>*>( m_ptrs[k] );
 
             VECTOR2D start, end;
-            start.x = i15->coords[0];
-            start.y = i15->coords[1];
-            end.x = i15->coords[2];
-            end.y = i15->coords[3];
+            start.x = scale( i15->coords[0] );
+            start.y = scale( i15->coords[1] );
+            end.x = scale( i15->coords[2] );
+            end.y = scale( i15->coords[3] );
 
             std::unique_ptr<PCB_TRACK> track = std::make_unique<PCB_TRACK>( m_board );
 
             track->SetLayer( (PCB_LAYER_ID) ( ( (int) F_Cu ) + i05.layer ) );
-            track->SetWidth( i15->width );
+            track->SetWidth( scale( i15->width ) );
             track->SetStart( start );
             track->SetEnd( end );
             // track->SetNet( getOrAddNetItem( netname ) );
@@ -809,15 +814,15 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_05<magic>& i05 )
             ALLEGRO::T_16<magic>* i16 = static_cast<ALLEGRO::T_16<magic>*>( m_ptrs[k] );
 
             VECTOR2D start, end;
-            start.x = i16->coords[0];
-            start.y = i16->coords[1];
-            end.x = i16->coords[2];
-            end.y = i16->coords[3];
+            start.x = scale( i16->coords[0] );
+            start.y = scale( i16->coords[1] );
+            end.x = scale( i16->coords[2] );
+            end.y = scale( i16->coords[3] );
 
             std::unique_ptr<PCB_TRACK> track = std::make_unique<PCB_TRACK>( m_board );
 
             track->SetLayer( (PCB_LAYER_ID) ( ( (int) F_Cu ) + i05.layer ) );
-            track->SetWidth( i16->width );
+            track->SetWidth( scale( i16->width ) );
             track->SetStart( start );
             track->SetEnd( end );
             // track->SetNet( getOrAddNetItem( netname ) );
@@ -831,15 +836,15 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_05<magic>& i05 )
             ALLEGRO::T_17<magic>* i17 = static_cast<ALLEGRO::T_17<magic>*>( m_ptrs[k] );
 
             VECTOR2D start, end;
-            start.x = i17->coords[0];
-            start.y = i17->coords[1];
-            end.x = i17->coords[2];
-            end.y = i17->coords[3];
+            start.x = scale( i17->coords[0] );
+            start.y = scale( i17->coords[1] );
+            end.x = scale( i17->coords[2] );
+            end.y = scale( i17->coords[3] );
 
             std::unique_ptr<PCB_TRACK> track = std::make_unique<PCB_TRACK>( m_board );
 
             track->SetLayer( (PCB_LAYER_ID) ( ( (int) F_Cu ) + i05.layer ) );
-            track->SetWidth( i17->width );
+            track->SetWidth( scale( i17->width ) );
             track->SetStart( start );
             track->SetEnd( end );
             // track->SetNet( getOrAddNetItem( netname ) );
