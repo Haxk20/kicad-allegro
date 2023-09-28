@@ -124,7 +124,7 @@ private:
         // 0x1F
         &Parse1F,
         // 0x20
-        nullptr,
+        &DefaultParser<ALLEGRO::T_20>,
         // 0x21
         &Parse21,
         // 0x22
@@ -154,7 +154,7 @@ private:
         // 0x2E
         &DefaultParser<ALLEGRO::T_2E>,
         // 0x2F
-        nullptr,
+        &DefaultParser<ALLEGRO::T_2F>,
         // 0x30
         &DefaultParser<ALLEGRO::T_30>,
         // 0x31
@@ -287,8 +287,8 @@ void ALLEGRO_PARSER<magic>::Parse()
         }
         else
         {
-            Log( "Do not have parser available" );
-            break;
+            Log( "Do not have parser t=%02X available", t );
+            return;
         }
     }
 
