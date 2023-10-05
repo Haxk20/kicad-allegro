@@ -413,7 +413,8 @@ struct T_0E
 {
     uint32_t t;
     uint32_t k;
-    uint32_t un[13];
+    uint32_t next;
+    uint32_t un[12];
 
     COND_FIELD( magic >= A_172, uint32_t[2], un1 );
 
@@ -896,15 +897,21 @@ struct T_26
 };
 
 // Shape
+enum ZONE_TYPE : uint8_t
+{
+    ZONE_TYPE_NET = 0x06,
+    ZONE_TYPE_TBD = 0x01,
+};
+
 template <MAGIC magic>
 struct T_28
 {
-    uint16_t type;
-    uint8_t  subtype;
-    uint8_t  layer;
+    uint16_t  type;
+    ZONE_TYPE subtype;
+    uint8_t   layer;
 
     uint32_t k;
-    uint32_t un1;
+    uint32_t ptr5;
 
     // Points to one of: header value, `x04`, `x2B`, `x2D`
     uint32_t ptr1;

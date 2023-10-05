@@ -17,6 +17,7 @@
 #include <layer_ids.h>
 #include <pcb_track.h>
 #include <trigo.h>
+#include <zone.h>
 
 #include "allegro_elem_parsers.h"
 #include "allegro_file.h"
@@ -35,11 +36,14 @@ private:
     void    BuildBoard();
     uint8_t GetCopperLayerCount();
     void    AddTrack( const ALLEGRO::T_1B<magic>& i1B, const ALLEGRO::T_05<magic>& i05 );
+    void AddZone( const std::optional<ALLEGRO::T_1B<magic>>& i1B, const ALLEGRO::T_28<magic>& i28 );
 
     void                    Skip( std::size_t n );
     void                    Log( const char* fmt... );
     bool                    IsType( uint32_t k, uint8_t t );
     std::optional<wxString> StringLookup( uint32_t k );
+    NETINFO_ITEM*           NetInfo( uint32_t k );
+    SHAPE_LINE_CHAIN        ShapeStartingAt( uint32_t* k );
 
     template <template <ALLEGRO::MAGIC> typename T>
     static uint32_t DefaultParser( ALLEGRO_PARSER& parser );
@@ -760,21 +764,7 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>& i1B,
 {
     uint32_t k = i05.first_segment_ptr;
 
-    NETINFO_ITEM*           netinfo = nullptr;
-    std::optional<wxString> netname = StringLookup( i1B.net_name );
-    if( netname )
-    {
-        if( NETINFO_ITEM* item = m_board->FindNet( *netname ) )
-        {
-            netinfo = item;
-        }
-        else
-        {
-            item = new NETINFO_ITEM( m_board, *netname, m_board->GetNetCount() + 1 );
-            m_board->Add( item, ADD_MODE::APPEND );
-            netinfo = item;
-        }
-    }
+    NETINFO_ITEM* netinfo = NetInfo( i1B.net_name );
 
     while( true )
     {
@@ -786,11 +776,11 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>& i1B,
 
             VECTOR2I start, end, center, mid;
             start.x = scale( i01->coords[0] );
-            start.y = scale( i01->coords[1] );
+            start.y = scale( -i01->coords[1] );
             end.x = scale( i01->coords[2] );
-            end.y = scale( i01->coords[3] );
+            end.y = scale( -i01->coords[3] );
             center.x = scale( (int32_t) cfp_to_double( i01->x ) );
-            center.y = scale( (int32_t) cfp_to_double( i01->y ) );
+            center.y = scale( -(int32_t) cfp_to_double( i01->y ) );
             mid = CalcArcMid( start, end, center );
 
             std::unique_ptr<PCB_ARC> arc = std::make_unique<PCB_ARC>( m_board );
@@ -812,9 +802,9 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>& i1B,
 
             VECTOR2D start, end;
             start.x = scale( i15->coords[0] );
-            start.y = scale( i15->coords[1] );
+            start.y = scale( -i15->coords[1] );
             end.x = scale( i15->coords[2] );
-            end.y = scale( i15->coords[3] );
+            end.y = scale( -i15->coords[3] );
 
             std::unique_ptr<PCB_TRACK> track = std::make_unique<PCB_TRACK>( m_board );
 
@@ -834,9 +824,9 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>& i1B,
 
             VECTOR2D start, end;
             start.x = scale( i16->coords[0] );
-            start.y = scale( i16->coords[1] );
+            start.y = scale( -i16->coords[1] );
             end.x = scale( i16->coords[2] );
-            end.y = scale( i16->coords[3] );
+            end.y = scale( -i16->coords[3] );
 
             std::unique_ptr<PCB_TRACK> track = std::make_unique<PCB_TRACK>( m_board );
 
@@ -856,9 +846,9 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>& i1B,
 
             VECTOR2D start, end;
             start.x = scale( i17->coords[0] );
-            start.y = scale( i17->coords[1] );
+            start.y = scale( -i17->coords[1] );
             end.x = scale( i17->coords[2] );
-            end.y = scale( i17->coords[3] );
+            end.y = scale( -i17->coords[3] );
 
             std::unique_ptr<PCB_TRACK> track = std::make_unique<PCB_TRACK>( m_board );
 
@@ -880,9 +870,79 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>& i1B,
 }
 
 template <ALLEGRO::MAGIC magic>
+void ALLEGRO_PARSER<magic>::AddZone( const std::optional<ALLEGRO::T_1B<magic>>& i1B,
+                                     const ALLEGRO::T_28<magic>&                i28 )
+{
+    std::unique_ptr<ZONE> zone = std::make_unique<ZONE>( m_board );
+    zone->SetZoneName( wxString::Format( "x28: 0x%08X", ntohl( i28.k ) ) );
+    zone->SetLocalClearance( 0 );
+
+    uint32_t       k = i28.first_segment_ptr;
+    SHAPE_POLY_SET outline;
+
+    SHAPE_LINE_CHAIN chain = ShapeStartingAt( &k );
+    zone->AddPolygon( chain );
+    // outline.AddOutline( chain );
+
+    // wxLogMessage( "Handling x28 0x%08X, subtype = 0x%02X", ntohl( i28.k ), i28.subtype );
+    // if( i28.k == 0x0001B814 )
+    // {
+    //     wxLogMessage( "***" );
+    // }
+
+    uint32_t hole_k = i28.ptr4;
+    while( IsType( hole_k, 0x34 ) )
+    {
+        ALLEGRO::T_34<magic>* i34 = static_cast<ALLEGRO::T_34<magic>*>( m_ptrs[hole_k] );
+        // wxLogMessage( "Handling x34 0x%08X", ntohl( i34->k ) );
+        uint32_t k = i34->ptr2;
+
+        SHAPE_LINE_CHAIN hole_chain = ShapeStartingAt( &k );
+        if( hole_chain.PointCount() >= 3 )
+        {
+            hole_chain.SetClosed( true );
+            zone->AddPolygon( hole_chain );
+        }
+        else
+        {
+            // wxLogMessage( "Skipping, why?" );
+        }
+        hole_k = i34->next;
+    }
+
+    if( i28.subtype == ALLEGRO::ZONE_TYPE_NET )
+    {
+        PCB_LAYER_ID layer = (PCB_LAYER_ID) ( ( (int) F_Cu ) + i28.layer );
+        zone->SetLayer( layer );
+
+        if( i1B )
+        {
+            NETINFO_ITEM* netinfo = NetInfo( i1B->net_name );
+            zone->SetNet( netinfo );
+        }
+
+        // zone->SetFilledPolysList( layer, outline );
+
+        m_board->Add( zone.release(), ADD_MODE::APPEND );
+    }
+    else if( i28.subtype == ALLEGRO::ZONE_TYPE_TBD )
+    {
+        // PCB_LAYER_ID layer = (PCB_LAYER_ID) ( ( (int) F_Cu ) + i28.layer );
+        zone->SetLayer( F_Cu );
+
+        // zone->SetIsRuleArea( true );
+        // zone->SetDoNotAllowCopperPour( true );
+
+        // m_board->Add( zone.release(), ADD_MODE::APPEND );
+    }
+}
+
+template <ALLEGRO::MAGIC magic>
 void ALLEGRO_PARSER<magic>::BuildBoard()
 {
-    m_board->SetCopperLayerCount( GetCopperLayerCount() );
+    // FIXME: Add one so we can see the bottom layer, which is currently tagged
+    // incorrectly on an inner layer.
+    m_board->SetCopperLayerCount( GetCopperLayerCount() + 1 );
 
     ALLEGRO::T_1B<magic>* i = static_cast<ALLEGRO::T_1B<magic>*>( m_ptrs[m_header->ll_x1B.head] );
     if( i != nullptr )
@@ -921,13 +981,11 @@ void ALLEGRO_PARSER<magic>::BuildBoard()
                         }
                         else if( IsType( k, 0x28 ) )
                         {
-                            ALLEGRO::T_28<magic>* i =
+                            ALLEGRO::T_28<magic>* i28 =
                                     static_cast<ALLEGRO::T_28<magic>*>( m_ptrs[k] );
-                            k = i->un1;
-                        }
-                        else if( IsType( k, 0x1B ) )
-                        {
-                            break;
+                            AddZone( *i, *i28 );
+
+                            k = i28->ptr5;
                         }
                         else if( IsType( k, 0x0E ) )
                         {
@@ -943,7 +1001,7 @@ void ALLEGRO_PARSER<magic>::BuildBoard()
 
                             k = i05->ptr0;
                         }
-                        else if( IsType( k, 0x04 ) )
+                        else if( IsType( k, 0x04 ) | IsType( k, 0x1B ) )
                         {
                             break;
                         }
@@ -967,6 +1025,28 @@ void ALLEGRO_PARSER<magic>::BuildBoard()
 
             i = static_cast<ALLEGRO::T_1B<magic>*>( m_ptrs[i->next] );
         } while( i->next != m_header->ll_x1B.tail );
+    }
+
+    uint32_t k = m_header->ll_x0E_x28.head;
+    while( k != m_header->ll_x0E_x28.tail )
+    {
+        if( IsType( k, 0x0E ) )
+        {
+            // Do not know what this represents
+            auto i0E = static_cast<ALLEGRO::T_0E<magic>*>( m_ptrs[k] );
+            k = i0E->next;
+        }
+        else if( IsType( k, 0x28 ) )
+        {
+            auto i28 = static_cast<ALLEGRO::T_28<magic>*>( m_ptrs[k] );
+            AddZone( {}, *i28 );
+            k = i28->ptr5;
+        }
+        else
+        {
+            // wxLogMessage( "Unexpected type with key = 0x%08X!", ntohl( k ) );
+            break;
+        }
     }
 }
 
@@ -1002,6 +1082,119 @@ std::optional<wxString> ALLEGRO_PARSER<magic>::StringLookup( uint32_t k )
         return wxString( m_strings[k] );
     }
     return {};
+}
+
+template <ALLEGRO::MAGIC magic>
+SHAPE_LINE_CHAIN ALLEGRO_PARSER<magic>::ShapeStartingAt( uint32_t* k )
+{
+    SHAPE_LINE_CHAIN chain;
+
+    bool first = true;
+    while( k != nullptr )
+    {
+        if( IsType( *k, 0x01 ) )
+        {
+            ALLEGRO::T_01<magic>* i01 = static_cast<ALLEGRO::T_01<magic>*>( m_ptrs[*k] );
+
+            VECTOR2I start, end, center, mid;
+            start.x = scale( i01->coords[0] );
+            start.y = scale( -i01->coords[1] );
+            end.x = scale( i01->coords[2] );
+            end.y = scale( -i01->coords[3] );
+
+            if( first )
+            {
+                chain.Append( start );
+            }
+            chain.Append( end );
+
+            *k = i01->next;
+        }
+        else if( IsType( *k, 0x15 ) )
+        {
+            ALLEGRO::T_15<magic>* i15 = static_cast<ALLEGRO::T_15<magic>*>( m_ptrs[*k] );
+
+            VECTOR2D start, end;
+            start.x = scale( i15->coords[0] );
+            start.y = scale( -i15->coords[1] );
+            end.x = scale( i15->coords[2] );
+            end.y = scale( -i15->coords[3] );
+
+            if( first )
+            {
+                chain.Append( start );
+            }
+            chain.Append( end );
+
+            *k = i15->next;
+        }
+        else if( IsType( *k, 0x16 ) )
+        {
+            ALLEGRO::T_16<magic>* i16 = static_cast<ALLEGRO::T_16<magic>*>( m_ptrs[*k] );
+
+            VECTOR2D start, end;
+            start.x = scale( i16->coords[0] );
+            start.y = scale( -i16->coords[1] );
+            end.x = scale( i16->coords[2] );
+            end.y = scale( -i16->coords[3] );
+
+            if( first )
+            {
+                chain.Append( start );
+            }
+            chain.Append( end );
+
+            *k = i16->next;
+        }
+        else if( IsType( *k, 0x17 ) )
+        {
+            ALLEGRO::T_17<magic>* i17 = static_cast<ALLEGRO::T_17<magic>*>( m_ptrs[*k] );
+
+            VECTOR2D start, end;
+            start.x = scale( i17->coords[0] );
+            start.y = scale( -i17->coords[1] );
+            end.x = scale( i17->coords[2] );
+            end.y = scale( -i17->coords[3] );
+
+            if( first )
+            {
+                chain.Append( start );
+            }
+            chain.Append( end );
+
+            *k = i17->next;
+        }
+        else
+        {
+            break;
+        }
+
+        first = false;
+    }
+
+    return chain;
+}
+
+template <ALLEGRO::MAGIC magic>
+NETINFO_ITEM* ALLEGRO_PARSER<magic>::NetInfo( uint32_t k )
+{
+    NETINFO_ITEM*           netinfo = nullptr;
+    std::optional<wxString> netname = StringLookup( k );
+
+    if( netname )
+    {
+        if( NETINFO_ITEM* item = m_board->FindNet( *netname ) )
+        {
+            netinfo = item;
+        }
+        else
+        {
+            item = new NETINFO_ITEM( m_board, *netname, m_board->GetNetCount() + 1 );
+            m_board->Add( item, ADD_MODE::APPEND );
+            netinfo = item;
+        }
+    }
+    return netinfo;
 }
 
 #endif // ALLEGRO_PARSER_H_
