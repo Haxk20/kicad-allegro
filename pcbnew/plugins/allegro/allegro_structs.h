@@ -184,7 +184,7 @@ struct T_04
 
 // Line (composed of multiple line segments, x01, x15, x16, and x17)
 template <MAGIC magic>
-struct T_05
+struct T_05_TRACK
 {
     uint16_t t;
     uint8_t  subtype;
@@ -904,7 +904,7 @@ enum ZONE_TYPE : uint8_t
 };
 
 template <MAGIC magic>
-struct T_28
+struct T_28_ZONE
 {
     uint16_t  type;
     ZONE_TYPE subtype;

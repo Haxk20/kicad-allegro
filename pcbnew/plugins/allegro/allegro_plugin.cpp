@@ -41,6 +41,18 @@ bool ALLEGRO_PLUGIN::CanReadBoard( const wxString& aFileName ) const
     return false;
 };
 
+bool ALLEGRO_PLUGIN::CanReadFootprint( const wxString& aFileName ) const
+{
+    wxLogWarning( "Func %s", __FUNCTION__ );
+    return CanReadBoard( aFileName );
+};
+
+bool ALLEGRO_PLUGIN::CanReadFootprintLib( const wxString& aFileName ) const
+{
+    wxLogWarning( "Func %s", __FUNCTION__ );
+    return CanReadBoard( aFileName );
+};
+
 BOARD* ALLEGRO_PLUGIN::LoadBoard( const wxString& aFileName, BOARD* aAppendToMe,
                                   const STRING_UTF8_MAP* aProperties, PROJECT* aProject,
                                   PROGRESS_REPORTER* aProgressReporter )

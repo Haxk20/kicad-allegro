@@ -14,7 +14,10 @@
 #include <wx/log.h>
 
 #include <board.h>
+#include <footprint.h>
 #include <layer_ids.h>
+#include <lib_id.h>
+#include <pcb_shape.h>
 #include <pcb_track.h>
 #include <trigo.h>
 #include <zone.h>
@@ -35,8 +38,11 @@ public:
 private:
     void    BuildBoard();
     uint8_t GetCopperLayerCount();
-    void    AddTrack( const ALLEGRO::T_1B<magic>& i1B, const ALLEGRO::T_05<magic>& i05 );
-    void AddZone( const std::optional<ALLEGRO::T_1B<magic>>& i1B, const ALLEGRO::T_28<magic>& i28 );
+    void    AddAnnotation( const ALLEGRO::T_14<magic>& i14 );
+    void    AddFootprint( const ALLEGRO::T_2B<magic>& i2B );
+    void    AddTrack( const ALLEGRO::T_1B<magic>& i1B, const ALLEGRO::T_05_TRACK<magic>& i05 );
+    void    AddZone( const std::optional<ALLEGRO::T_1B<magic>>& i1B,
+                     const ALLEGRO::T_28_ZONE<magic>&           i28 );
 
     void                    Skip( std::size_t n );
     void                    Log( const char* fmt... );
@@ -44,6 +50,8 @@ private:
     std::optional<wxString> StringLookup( uint32_t k );
     NETINFO_ITEM*           NetInfo( uint32_t k );
     SHAPE_LINE_CHAIN        ShapeStartingAt( uint32_t* k );
+
+    std::optional<wxString> RefdesLookup( const ALLEGRO::T_2D<magic>& i2D );
 
     template <template <ALLEGRO::MAGIC> typename T>
     static uint32_t DefaultParser( ALLEGRO_PARSER& parser );
@@ -76,7 +84,7 @@ private:
         // 0x04
         &DefaultParser<ALLEGRO::T_04>,
         // 0x05
-        &DefaultParser<ALLEGRO::T_05>,
+        &DefaultParser<ALLEGRO::T_05_TRACK>,
         // 0x06
         &DefaultParser<ALLEGRO::T_06>,
         // 0x07
@@ -146,7 +154,7 @@ private:
         // 0x27
         &Parse27,
         // 0x28
-        &DefaultParser<ALLEGRO::T_28>,
+        &DefaultParser<ALLEGRO::T_28_ZONE>,
         // 0x29
         nullptr,
         // 0x2A
@@ -759,8 +767,143 @@ uint8_t ALLEGRO_PARSER<magic>::GetCopperLayerCount()
 }
 
 template <ALLEGRO::MAGIC magic>
-void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>& i1B,
-                                      const ALLEGRO::T_05<magic>& i05 )
+void ALLEGRO_PARSER<magic>::AddAnnotation( const ALLEGRO::T_14<magic>& i14 )
+{
+    PCB_LAYER_ID layer = User_1;
+    uint32_t     k = i14.ptr2;
+
+    while( true )
+    {
+        if( IsType( k, 0x01 ) )
+        {
+            ALLEGRO::T_01<magic>* i01 = static_cast<ALLEGRO::T_01<magic>*>( m_ptrs[k] );
+
+            double r = cfp_to_double( i01->r );
+
+            VECTOR2I start, end, center, mid;
+            start.x = scale( i01->coords[0] );
+            start.y = scale( -i01->coords[1] );
+            end.x = scale( i01->coords[2] );
+            end.y = scale( -i01->coords[3] );
+            center.x = scale( (int32_t) cfp_to_double( i01->x ) );
+            center.y = scale( -(int32_t) cfp_to_double( i01->y ) );
+            mid = CalcArcMid( start, end, center );
+
+            PCB_SHAPE* arc = new PCB_SHAPE( m_board, SHAPE_T::ARC );
+
+            arc->SetLayer( layer );
+            arc->SetWidth( scale( i01->width ) );
+            arc->SetArcGeometry( start, mid, end );
+
+            m_board->Add( arc, ADD_MODE::APPEND );
+
+            k = i01->next;
+        }
+        else if( IsType( k, 0x15 ) )
+        {
+            ALLEGRO::T_15<magic>* i15 = static_cast<ALLEGRO::T_15<magic>*>( m_ptrs[k] );
+
+            VECTOR2D start, end;
+            start.x = scale( i15->coords[0] );
+            start.y = scale( -i15->coords[1] );
+            end.x = scale( i15->coords[2] );
+            end.y = scale( -i15->coords[3] );
+
+            PCB_SHAPE* segment = new PCB_SHAPE( m_board, SHAPE_T::SEGMENT );
+
+            segment->SetLayer( layer );
+            segment->SetWidth( scale( i15->width ) );
+            segment->SetStart( start );
+            segment->SetEnd( end );
+
+            m_board->Add( segment, ADD_MODE::APPEND );
+
+            k = i15->next;
+        }
+        else if( IsType( k, 0x16 ) )
+        {
+            ALLEGRO::T_16<magic>* i16 = static_cast<ALLEGRO::T_16<magic>*>( m_ptrs[k] );
+
+            VECTOR2D start, end;
+            start.x = scale( i16->coords[0] );
+            start.y = scale( -i16->coords[1] );
+            end.x = scale( i16->coords[2] );
+            end.y = scale( -i16->coords[3] );
+
+            PCB_SHAPE* segment = new PCB_SHAPE( m_board, SHAPE_T::SEGMENT );
+
+            segment->SetLayer( layer );
+            segment->SetWidth( scale( i16->width ) );
+            segment->SetStart( start );
+            segment->SetEnd( end );
+
+            m_board->Add( segment, ADD_MODE::APPEND );
+
+            k = i16->next;
+        }
+        else if( IsType( k, 0x17 ) )
+        {
+            ALLEGRO::T_17<magic>* i17 = static_cast<ALLEGRO::T_17<magic>*>( m_ptrs[k] );
+
+            VECTOR2D start, end;
+            start.x = scale( i17->coords[0] );
+            start.y = scale( -i17->coords[1] );
+            end.x = scale( i17->coords[2] );
+            end.y = scale( -i17->coords[3] );
+
+            PCB_SHAPE* segment = new PCB_SHAPE( m_board, SHAPE_T::SEGMENT );
+
+            segment->SetLayer( layer );
+            segment->SetWidth( scale( i17->width ) );
+            segment->SetStart( start );
+            segment->SetEnd( end );
+
+            m_board->Add( segment, ADD_MODE::APPEND );
+
+            k = i17->next;
+        }
+        else
+        {
+            break;
+        }
+    }
+}
+
+template <ALLEGRO::MAGIC magic>
+void ALLEGRO_PARSER<magic>::AddFootprint( const ALLEGRO::T_2B<magic>& i2B )
+{
+    // wxLogMessage( "Adding footprint" );
+    wxASSERT_MSG( m_strings.count( i2B.footprint_string_ref ) == 1, "Expected a string" );
+    wxString footprint_name = m_strings[i2B.footprint_string_ref];
+    LIB_ID   lib_id = LIB_ID( "my_lib", footprint_name );
+
+    uint32_t k = i2B.ptr2;
+    while( IsType( k, 0x2D ) )
+    {
+        ALLEGRO::T_2D<magic>* i2D = static_cast<ALLEGRO::T_2D<magic>*>( m_ptrs[k] );
+
+        FOOTPRINT* fp = new FOOTPRINT( m_board );
+        fp->SetFPID( lib_id );
+
+        std::optional<wxString> refdes = RefdesLookup( *i2D );
+        if( refdes )
+        {
+            fp->SetReference( *refdes );
+        }
+        else
+        {
+            fp->SetReference( "UNKNOWN123" );
+        }
+
+        k = i2D->next;
+
+        m_board->Add( fp, ADD_MODE::APPEND );
+    }
+}
+
+template <ALLEGRO::MAGIC magic>
+void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>&       i1B,
+                                      const ALLEGRO::T_05_TRACK<magic>& i05 )
 {
     uint32_t k = i05.first_segment_ptr;
 
@@ -871,11 +1014,12 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>& i1B,
 
 template <ALLEGRO::MAGIC magic>
 void ALLEGRO_PARSER<magic>::AddZone( const std::optional<ALLEGRO::T_1B<magic>>& i1B,
-                                     const ALLEGRO::T_28<magic>&                i28 )
+                                     const ALLEGRO::T_28_ZONE<magic>&           i28 )
 {
     std::unique_ptr<ZONE> zone = std::make_unique<ZONE>( m_board );
     zone->SetZoneName( wxString::Format( "x28: 0x%08X", ntohl( i28.k ) ) );
     zone->SetLocalClearance( 0 );
+    zone->SetMinThickness( 0 );
 
     uint32_t       k = i28.first_segment_ptr;
     SHAPE_POLY_SET outline;
@@ -981,8 +1125,8 @@ void ALLEGRO_PARSER<magic>::BuildBoard()
                         }
                         else if( IsType( k, 0x28 ) )
                         {
-                            ALLEGRO::T_28<magic>* i28 =
-                                    static_cast<ALLEGRO::T_28<magic>*>( m_ptrs[k] );
+                            ALLEGRO::T_28_ZONE<magic>* i28 =
+                                    static_cast<ALLEGRO::T_28_ZONE<magic>*>( m_ptrs[k] );
                             AddZone( *i, *i28 );
 
                             k = i28->ptr5;
@@ -995,8 +1139,8 @@ void ALLEGRO_PARSER<magic>::BuildBoard()
                         }
                         else if( IsType( k, 0x05 ) )
                         {
-                            ALLEGRO::T_05<magic>* i05 =
-                                    static_cast<ALLEGRO::T_05<magic>*>( m_ptrs[k] );
+                            ALLEGRO::T_05_TRACK<magic>* i05 =
+                                    static_cast<ALLEGRO::T_05_TRACK<magic>*>( m_ptrs[k] );
                             AddTrack( *i, *i05 );
 
                             k = i05->ptr0;
@@ -1028,24 +1172,49 @@ void ALLEGRO_PARSER<magic>::BuildBoard()
     }
 
     uint32_t k = m_header->ll_x0E_x28.head;
-    while( k != m_header->ll_x0E_x28.tail )
+    if( k != 0 )
     {
-        if( IsType( k, 0x0E ) )
+        while( k != m_header->ll_x0E_x28.tail )
         {
-            // Do not know what this represents
-            auto i0E = static_cast<ALLEGRO::T_0E<magic>*>( m_ptrs[k] );
-            k = i0E->next;
+            if( IsType( k, 0x0E ) )
+            {
+                // Do not know what this represents
+                auto i0E = static_cast<ALLEGRO::T_0E<magic>*>( m_ptrs[k] );
+                k = i0E->next;
+            }
+            else if( IsType( k, 0x28 ) )
+            {
+                auto i28 = static_cast<ALLEGRO::T_28_ZONE<magic>*>( m_ptrs[k] );
+                AddZone( {}, *i28 );
+                k = i28->ptr5;
+            }
+            else
+            {
+                // wxLogMessage( "Unexpected type with key = 0x%08X!", ntohl( k ) );
+                break;
+            }
         }
-        else if( IsType( k, 0x28 ) )
+    }
+
+    k = m_header->ll_x14.head;
+    if( k != 0 )
+    {
+        while( k != m_header->ll_x14.tail )
         {
-            auto i28 = static_cast<ALLEGRO::T_28<magic>*>( m_ptrs[k] );
-            AddZone( {}, *i28 );
-            k = i28->ptr5;
+            auto i14 = static_cast<ALLEGRO::T_14<magic>*>( m_ptrs[k] );
+            AddAnnotation( *i14 );
+            k = i14->next;
         }
-        else
+    }
+
+    k = m_header->ll_x2B.head;
+    if( k != 0 )
+    {
+        while( k != m_header->ll_x2B.tail )
         {
-            // wxLogMessage( "Unexpected type with key = 0x%08X!", ntohl( k ) );
-            break;
+            auto i2B = static_cast<ALLEGRO::T_2B<magic>*>( m_ptrs[k] );
+            AddFootprint( *i2B );
+            k = i2B->next;
         }
     }
 }
@@ -1173,6 +1342,27 @@ SHAPE_LINE_CHAIN ALLEGRO_PARSER<magic>::ShapeStartingAt( uint32_t* k )
     }
 
     return chain;
+}
+
+template <ALLEGRO::MAGIC magic>
+std::optional<wxString> ALLEGRO_PARSER<magic>::RefdesLookup( const ALLEGRO::T_2D<magic>& i2D )
+{
+    uint32_t inst_ref = 0;
+    if constexpr( std::is_same_v<decltype( i2D.inst_ref ), std::monostate> )
+    {
+        inst_ref = i2D.inst_ref_16x;
+    }
+    else
+    {
+        inst_ref = i2D.inst_ref;
+    }
+
+    if( inst_ref == 0 || !IsType( inst_ref, 0x07 ) )
+        return {};
+
+    ALLEGRO::T_07<magic>* i07 = static_cast<ALLEGRO::T_07<magic>*>( m_ptrs[inst_ref] );
+    wxASSERT_MSG( m_strings.count( i07->refdes_string_ref ) == 1, "Expected a string" );
+    return wxString( m_strings[i07->refdes_string_ref] );
 }
 
 template <ALLEGRO::MAGIC magic>
