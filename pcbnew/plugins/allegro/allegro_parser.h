@@ -17,6 +17,7 @@
 #include <footprint.h>
 #include <layer_ids.h>
 #include <lib_id.h>
+#include <pad.h>
 #include <pcb_shape.h>
 #include <pcb_track.h>
 #include <trigo.h>
@@ -40,6 +41,7 @@ private:
     uint8_t GetCopperLayerCount();
     void    AddAnnotation( const ALLEGRO::T_14<magic>& i14 );
     void    AddFootprint( const ALLEGRO::T_2B<magic>& i2B );
+    void    AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i32 );
     void    AddTrack( const ALLEGRO::T_1B<magic>& i1B, const ALLEGRO::T_05_TRACK<magic>& i05 );
     void    AddZone( const std::optional<ALLEGRO::T_1B<magic>>& i1B,
                      const ALLEGRO::T_28_ZONE<magic>&           i28 );
@@ -49,7 +51,9 @@ private:
     bool                    IsType( uint32_t k, uint8_t t );
     std::optional<wxString> StringLookup( uint32_t k );
     NETINFO_ITEM*           NetInfo( uint32_t k );
+    NETINFO_ITEM*           NetInfo( const ALLEGRO::T_04<magic>& i04 );
     SHAPE_LINE_CHAIN        ShapeStartingAt( uint32_t* k );
+    PCB_LAYER_ID            EtchLayerToKi( uint8_t a_layer );
 
     std::optional<wxString> RefdesLookup( const ALLEGRO::T_2D<magic>& i2D );
 
@@ -203,6 +207,9 @@ private:
     ALLEGRO::HEADER* m_header = nullptr;
     void*            m_baseAddr = nullptr;
     void*            m_curAddr = nullptr;
+
+    // 0 = not calculated yet
+    uint16_t m_layerCount = 0;
 
     std::vector<std::tuple<uint32_t, uint32_t>> m_layers;
     std::map<uint32_t, char*>                   m_strings;
@@ -744,6 +751,11 @@ uint32_t ALLEGRO_PARSER<magic>::Parse3C( ALLEGRO_PARSER& parser )
 template <ALLEGRO::MAGIC magic>
 uint8_t ALLEGRO_PARSER<magic>::GetCopperLayerCount()
 {
+    if( m_layerCount > 1 )
+    {
+        return m_layerCount;
+    }
+
     std::tuple<uint32_t, uint32_t> tup = m_layers[4];
     uint32_t                       ptr = std::get<1>( tup );
 
@@ -752,12 +764,13 @@ uint8_t ALLEGRO_PARSER<magic>::GetCopperLayerCount()
         const ALLEGRO::T_2A* x = &m_t2A_map.at( ptr );
         if( x->references )
         {
-            return x->reference_entries.size();
+            m_layerCount = x->reference_entries.size();
         }
         else
         {
-            return x->local_entries.size();
+            m_layerCount = x->local_entries.size();
         }
+        return m_layerCount;
     }
     else
     {
@@ -885,6 +898,7 @@ void ALLEGRO_PARSER<magic>::AddFootprint( const ALLEGRO::T_2B<magic>& i2B )
         FOOTPRINT* fp = new FOOTPRINT( m_board );
         fp->SetFPID( lib_id );
 
+        // Refdes
         std::optional<wxString> refdes = RefdesLookup( *i2D );
         if( refdes )
         {
@@ -895,10 +909,75 @@ void ALLEGRO_PARSER<magic>::AddFootprint( const ALLEGRO::T_2B<magic>& i2B )
             fp->SetReference( "UNKNOWN123" );
         }
 
+        // Draw pads
+        // Note: The order of this code relative to the above positioning code
+        // is important. `AddPad` assumes the footprint is already in the
+        // correct position. Calling `SetPosition` on the footprint moves the
+        // pads.
+        uint32_t k_pad = i2D->first_pad_ptr;
+        while( IsType( k_pad, 0x32 ) )
+        {
+            ALLEGRO::T_32<magic>* i32 = static_cast<ALLEGRO::T_32<magic>*>( m_ptrs[k_pad] );
+            AddPad( fp, *i32 );
+            k_pad = i32->next;
+        }
+
+        // Position the object
+        fp->SetPosition( VECTOR2I( scale( i2D->coords[0] ), scale( -i2D->coords[1] ) ) );
+        fp->SetOrientationDegrees( i2D->rotation / 1000. );
+        fp->SetLayerAndFlip( i2D->layer == 0 ? F_Cu : B_Cu );
+
         k = i2D->next;
 
         m_board->Add( fp, ADD_MODE::APPEND );
     }
+}
+
+template <ALLEGRO::MAGIC magic>
+void ALLEGRO_PARSER<magic>::AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i32 )
+{
+    std::unique_ptr<PAD> pad = std::make_unique<PAD>( fp );
+
+    // Let's deal with SMD pads first
+    pad->SetAttribute( PAD_ATTRIB::SMD );
+
+    pad->SetLayer( F_Cu );
+    pad->SetLayerSet( LSET( 1, F_Cu ) );
+
+    // Find net information
+    if( IsType( i32.ptr1, 0x04 ) )
+    {
+        const ALLEGRO::T_04<magic>* i04 = static_cast<ALLEGRO::T_04<magic>*>( m_ptrs[i32.ptr1] );
+
+        NETINFO_ITEM* netinfo = NetInfo( *i04 );
+        pad->SetNet( netinfo );
+    }
+
+
+    const ALLEGRO::T_0D<magic>* i0D = static_cast<ALLEGRO::T_0D<magic>*>( m_ptrs[i32.ptr5] );
+    VECTOR2I                    center;
+    center.x = scale( i0D->coords[0] );
+    center.y = scale( -i0D->coords[1] );
+    pad->SetPosition( center );
+
+    const ALLEGRO::T_1C<magic>* i1C = static_cast<ALLEGRO::T_1C<magic>*>( m_ptrs[i0D->pad_ptr] );
+
+    // FIXME: The list of pads immediately follows i1C in memory. This is an
+    // ugly hack to get that address, though.
+    const ALLEGRO::t13<magic>* first_t13 =
+            (ALLEGRO::t13<magic>*) ( (char*) i1C
+                                     + ALLEGRO::sizeof_allegro_obj<ALLEGRO::T_1C<magic>>() );
+
+    pad->SetSize( VECTOR2I( scale( first_t13->w ), scale( first_t13->h ) ) );
+    pad->SetOrientationDegrees( i0D->rotation / 1000. );
+
+    switch( first_t13->t )
+    {
+    case 0x02: pad->SetShape( PAD_SHAPE::CIRCLE ); break;
+    case 0x06: pad->SetShape( PAD_SHAPE::RECTANGLE ); break;
+    }
+
+    fp->Add( pad.release(), ADD_MODE::APPEND );
 }
 
 template <ALLEGRO::MAGIC magic>
@@ -928,7 +1007,7 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>&       i1B,
 
             std::unique_ptr<PCB_ARC> arc = std::make_unique<PCB_ARC>( m_board );
 
-            arc->SetLayer( (PCB_LAYER_ID) ( ( (int) F_Cu ) + i05.layer ) );
+            arc->SetLayer( EtchLayerToKi( i05.layer ) );
             arc->SetWidth( scale( i01->width ) );
             arc->SetStart( start );
             arc->SetMid( mid );
@@ -951,7 +1030,7 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>&       i1B,
 
             std::unique_ptr<PCB_TRACK> track = std::make_unique<PCB_TRACK>( m_board );
 
-            track->SetLayer( (PCB_LAYER_ID) ( ( (int) F_Cu ) + i05.layer ) );
+            track->SetLayer( EtchLayerToKi( i05.layer ) );
             track->SetWidth( scale( i15->width ) );
             track->SetStart( start );
             track->SetEnd( end );
@@ -973,7 +1052,7 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>&       i1B,
 
             std::unique_ptr<PCB_TRACK> track = std::make_unique<PCB_TRACK>( m_board );
 
-            track->SetLayer( (PCB_LAYER_ID) ( ( (int) F_Cu ) + i05.layer ) );
+            track->SetLayer( EtchLayerToKi( i05.layer ) );
             track->SetWidth( scale( i16->width ) );
             track->SetStart( start );
             track->SetEnd( end );
@@ -995,7 +1074,7 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>&       i1B,
 
             std::unique_ptr<PCB_TRACK> track = std::make_unique<PCB_TRACK>( m_board );
 
-            track->SetLayer( (PCB_LAYER_ID) ( ( (int) F_Cu ) + i05.layer ) );
+            track->SetLayer( EtchLayerToKi( i05.layer ) );
             track->SetWidth( scale( i17->width ) );
             track->SetStart( start );
             track->SetEnd( end );
@@ -1086,7 +1165,7 @@ void ALLEGRO_PARSER<magic>::BuildBoard()
 {
     // FIXME: Add one so we can see the bottom layer, which is currently tagged
     // incorrectly on an inner layer.
-    m_board->SetCopperLayerCount( GetCopperLayerCount() + 1 );
+    m_board->SetCopperLayerCount( GetCopperLayerCount() );
 
     ALLEGRO::T_1B<magic>* i = static_cast<ALLEGRO::T_1B<magic>*>( m_ptrs[m_header->ll_x1B.head] );
     if( i != nullptr )
@@ -1345,6 +1424,19 @@ SHAPE_LINE_CHAIN ALLEGRO_PARSER<magic>::ShapeStartingAt( uint32_t* k )
 }
 
 template <ALLEGRO::MAGIC magic>
+PCB_LAYER_ID ALLEGRO_PARSER<magic>::EtchLayerToKi( uint8_t a_layer )
+{
+    if( a_layer == GetCopperLayerCount() - 1 )
+    {
+        return B_Cu;
+    }
+    else
+    {
+        return (PCB_LAYER_ID) ( ( (int) F_Cu ) + a_layer );
+    }
+}
+
+template <ALLEGRO::MAGIC magic>
 std::optional<wxString> ALLEGRO_PARSER<magic>::RefdesLookup( const ALLEGRO::T_2D<magic>& i2D )
 {
     uint32_t inst_ref = 0;
@@ -1385,6 +1477,13 @@ NETINFO_ITEM* ALLEGRO_PARSER<magic>::NetInfo( uint32_t k )
         }
     }
     return netinfo;
+}
+
+template <ALLEGRO::MAGIC magic>
+NETINFO_ITEM* ALLEGRO_PARSER<magic>::NetInfo( const ALLEGRO::T_04<magic>& i04 )
+{
+    ALLEGRO::T_1B<magic>* i1B = static_cast<ALLEGRO::T_1B<magic>*>( m_ptrs[i04.ptr1] );
+    return NetInfo( i1B->net_name );
 }
 
 #endif // ALLEGRO_PARSER_H_
