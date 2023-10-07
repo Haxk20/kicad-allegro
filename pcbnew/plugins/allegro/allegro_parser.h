@@ -953,12 +953,21 @@ void ALLEGRO_PARSER<magic>::AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i
         pad->SetNet( netinfo );
     }
 
-
     const ALLEGRO::T_0D<magic>* i0D = static_cast<ALLEGRO::T_0D<magic>*>( m_ptrs[i32.ptr5] );
     VECTOR2I                    center;
     center.x = scale( i0D->coords[0] );
     center.y = scale( -i0D->coords[1] );
     pad->SetPosition( center );
+
+    std::optional<wxString> pad_number = StringLookup( i0D->str_ptr );
+    if( pad_number )
+    {
+        pad->SetNumber( *pad_number );
+    }
+    else
+    {
+        pad->SetNumber( "MISSING" );
+    }
 
     const ALLEGRO::T_1C<magic>* i1C = static_cast<ALLEGRO::T_1C<magic>*>( m_ptrs[i0D->pad_ptr] );
 
