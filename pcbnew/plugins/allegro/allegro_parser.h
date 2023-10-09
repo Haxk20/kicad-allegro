@@ -54,6 +54,7 @@ private:
     NETINFO_ITEM*           NetInfo( const ALLEGRO::T_04<magic>& i04 );
     SHAPE_LINE_CHAIN        ShapeStartingAt( uint32_t* k );
     PCB_LAYER_ID            EtchLayerToKi( uint8_t a_layer );
+    double                  Scale( double a_allegroValue );
 
     std::optional<wxString> RefdesLookup( const ALLEGRO::T_2D<magic>& i2D );
 
@@ -208,6 +209,8 @@ private:
     void*            m_baseAddr = nullptr;
     void*            m_curAddr = nullptr;
 
+    double m_scaleFactor = 0;
+
     // 0 = not calculated yet
     uint16_t m_layerCount = 0;
 
@@ -247,11 +250,6 @@ double cfp_to_double( ALLEGRO::CADENCE_FP r )
     return g;
 }
 
-inline int scale( int x )
-{
-    return x * 100;
-}
-
 // Implementation in header file is necessary because of templating.
 
 template <ALLEGRO::MAGIC magic>
@@ -270,6 +268,18 @@ void ALLEGRO_PARSER<magic>::Parse()
     Skip( sizeof( ALLEGRO::HEADER ) );
 
     m_ptrs.reserve( m_header->object_count );
+
+    // Cache a fixed scale factor
+    switch( m_header->units )
+    {
+    case ALLEGRO::BRD_UNITS::IMPERIAL:
+        m_scaleFactor = ( (double) 25400. ) / m_header->unit_divisor;
+        break;
+    case ALLEGRO::BRD_UNITS::METRIC:
+        m_scaleFactor = ( (double) 1000000. ) / m_header->unit_divisor;
+        break;
+    default: wxLogError( "Unrecognized units type: 0x%02X", m_header->units ); return;
+    };
 
     // Layer map
     for( uint8_t i = 0; i < 25; i++ )
@@ -794,18 +804,18 @@ void ALLEGRO_PARSER<magic>::AddAnnotation( const ALLEGRO::T_14<magic>& i14 )
             double r = cfp_to_double( i01->r );
 
             VECTOR2I start, end, center, mid;
-            start.x = scale( i01->coords[0] );
-            start.y = scale( -i01->coords[1] );
-            end.x = scale( i01->coords[2] );
-            end.y = scale( -i01->coords[3] );
-            center.x = scale( (int32_t) cfp_to_double( i01->x ) );
-            center.y = scale( -(int32_t) cfp_to_double( i01->y ) );
+            start.x = Scale( i01->coords[0] );
+            start.y = Scale( -i01->coords[1] );
+            end.x = Scale( i01->coords[2] );
+            end.y = Scale( -i01->coords[3] );
+            center.x = Scale( (int32_t) cfp_to_double( i01->x ) );
+            center.y = Scale( -(int32_t) cfp_to_double( i01->y ) );
             mid = CalcArcMid( start, end, center );
 
             PCB_SHAPE* arc = new PCB_SHAPE( m_board, SHAPE_T::ARC );
 
             arc->SetLayer( layer );
-            arc->SetWidth( scale( i01->width ) );
+            arc->SetWidth( Scale( i01->width ) );
             arc->SetArcGeometry( start, mid, end );
 
             m_board->Add( arc, ADD_MODE::APPEND );
@@ -817,15 +827,15 @@ void ALLEGRO_PARSER<magic>::AddAnnotation( const ALLEGRO::T_14<magic>& i14 )
             ALLEGRO::T_15<magic>* i15 = static_cast<ALLEGRO::T_15<magic>*>( m_ptrs[k] );
 
             VECTOR2D start, end;
-            start.x = scale( i15->coords[0] );
-            start.y = scale( -i15->coords[1] );
-            end.x = scale( i15->coords[2] );
-            end.y = scale( -i15->coords[3] );
+            start.x = Scale( i15->coords[0] );
+            start.y = Scale( -i15->coords[1] );
+            end.x = Scale( i15->coords[2] );
+            end.y = Scale( -i15->coords[3] );
 
             PCB_SHAPE* segment = new PCB_SHAPE( m_board, SHAPE_T::SEGMENT );
 
             segment->SetLayer( layer );
-            segment->SetWidth( scale( i15->width ) );
+            segment->SetWidth( Scale( i15->width ) );
             segment->SetStart( start );
             segment->SetEnd( end );
 
@@ -838,15 +848,15 @@ void ALLEGRO_PARSER<magic>::AddAnnotation( const ALLEGRO::T_14<magic>& i14 )
             ALLEGRO::T_16<magic>* i16 = static_cast<ALLEGRO::T_16<magic>*>( m_ptrs[k] );
 
             VECTOR2D start, end;
-            start.x = scale( i16->coords[0] );
-            start.y = scale( -i16->coords[1] );
-            end.x = scale( i16->coords[2] );
-            end.y = scale( -i16->coords[3] );
+            start.x = Scale( i16->coords[0] );
+            start.y = Scale( -i16->coords[1] );
+            end.x = Scale( i16->coords[2] );
+            end.y = Scale( -i16->coords[3] );
 
             PCB_SHAPE* segment = new PCB_SHAPE( m_board, SHAPE_T::SEGMENT );
 
             segment->SetLayer( layer );
-            segment->SetWidth( scale( i16->width ) );
+            segment->SetWidth( Scale( i16->width ) );
             segment->SetStart( start );
             segment->SetEnd( end );
 
@@ -859,15 +869,15 @@ void ALLEGRO_PARSER<magic>::AddAnnotation( const ALLEGRO::T_14<magic>& i14 )
             ALLEGRO::T_17<magic>* i17 = static_cast<ALLEGRO::T_17<magic>*>( m_ptrs[k] );
 
             VECTOR2D start, end;
-            start.x = scale( i17->coords[0] );
-            start.y = scale( -i17->coords[1] );
-            end.x = scale( i17->coords[2] );
-            end.y = scale( -i17->coords[3] );
+            start.x = Scale( i17->coords[0] );
+            start.y = Scale( -i17->coords[1] );
+            end.x = Scale( i17->coords[2] );
+            end.y = Scale( -i17->coords[3] );
 
             PCB_SHAPE* segment = new PCB_SHAPE( m_board, SHAPE_T::SEGMENT );
 
             segment->SetLayer( layer );
-            segment->SetWidth( scale( i17->width ) );
+            segment->SetWidth( Scale( i17->width ) );
             segment->SetStart( start );
             segment->SetEnd( end );
 
@@ -895,7 +905,8 @@ void ALLEGRO_PARSER<magic>::AddFootprint( const ALLEGRO::T_2B<magic>& i2B )
     {
         ALLEGRO::T_2D<magic>* i2D = static_cast<ALLEGRO::T_2D<magic>*>( m_ptrs[k] );
 
-        FOOTPRINT* fp = new FOOTPRINT( m_board );
+        std::unique_ptr<FOOTPRINT> fp = std::make_unique<FOOTPRINT>( m_board );
+        fp->SetAttributes( FOOTPRINT_ATTR_T::FP_SMD );
         fp->SetFPID( lib_id );
 
         // Refdes
@@ -918,18 +929,18 @@ void ALLEGRO_PARSER<magic>::AddFootprint( const ALLEGRO::T_2B<magic>& i2B )
         while( IsType( k_pad, 0x32 ) )
         {
             ALLEGRO::T_32<magic>* i32 = static_cast<ALLEGRO::T_32<magic>*>( m_ptrs[k_pad] );
-            AddPad( fp, *i32 );
+            AddPad( &*fp, *i32 );
             k_pad = i32->next;
         }
 
         // Position the object
-        fp->SetPosition( VECTOR2I( scale( i2D->coords[0] ), scale( -i2D->coords[1] ) ) );
+        fp->SetPosition( VECTOR2I( Scale( i2D->coords[0] ), Scale( -i2D->coords[1] ) ) );
         fp->SetOrientationDegrees( i2D->rotation / 1000. );
         fp->SetLayerAndFlip( i2D->layer == 0 ? F_Cu : B_Cu );
 
         k = i2D->next;
 
-        m_board->Add( fp, ADD_MODE::APPEND );
+        m_board->Add( fp.release(), ADD_MODE::APPEND );
     }
 }
 
@@ -955,8 +966,8 @@ void ALLEGRO_PARSER<magic>::AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i
 
     const ALLEGRO::T_0D<magic>* i0D = static_cast<ALLEGRO::T_0D<magic>*>( m_ptrs[i32.ptr5] );
     VECTOR2I                    center;
-    center.x = scale( i0D->coords[0] );
-    center.y = scale( -i0D->coords[1] );
+    center.x = Scale( i0D->coords[0] );
+    center.y = Scale( -i0D->coords[1] );
     pad->SetPosition( center );
 
     std::optional<wxString> pad_number = StringLookup( i0D->str_ptr );
@@ -977,13 +988,15 @@ void ALLEGRO_PARSER<magic>::AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i
             (ALLEGRO::t13<magic>*) ( (char*) i1C
                                      + ALLEGRO::sizeof_allegro_obj<ALLEGRO::T_1C<magic>>() );
 
-    pad->SetSize( VECTOR2I( scale( first_t13->w ), scale( first_t13->h ) ) );
+    pad->SetSize( VECTOR2I( Scale( first_t13->w ), Scale( first_t13->h ) ) );
     pad->SetOrientationDegrees( i0D->rotation / 1000. );
 
     switch( first_t13->t )
     {
     case 0x02: pad->SetShape( PAD_SHAPE::CIRCLE ); break;
+    case 0x05:
     case 0x06: pad->SetShape( PAD_SHAPE::RECTANGLE ); break;
+    default: wxLogMessage( "Unrecognized type on %s: t=%d", fp->GetReference(), first_t13->t );
     }
 
     fp->Add( pad.release(), ADD_MODE::APPEND );
@@ -1006,18 +1019,18 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>&       i1B,
             double r = cfp_to_double( i01->r );
 
             VECTOR2I start, end, center, mid;
-            start.x = scale( i01->coords[0] );
-            start.y = scale( -i01->coords[1] );
-            end.x = scale( i01->coords[2] );
-            end.y = scale( -i01->coords[3] );
-            center.x = scale( (int32_t) cfp_to_double( i01->x ) );
-            center.y = scale( -(int32_t) cfp_to_double( i01->y ) );
+            start.x = Scale( i01->coords[0] );
+            start.y = Scale( -i01->coords[1] );
+            end.x = Scale( i01->coords[2] );
+            end.y = Scale( -i01->coords[3] );
+            center.x = Scale( (int32_t) cfp_to_double( i01->x ) );
+            center.y = Scale( -(int32_t) cfp_to_double( i01->y ) );
             mid = CalcArcMid( start, end, center );
 
             std::unique_ptr<PCB_ARC> arc = std::make_unique<PCB_ARC>( m_board );
 
             arc->SetLayer( EtchLayerToKi( i05.layer ) );
-            arc->SetWidth( scale( i01->width ) );
+            arc->SetWidth( Scale( i01->width ) );
             arc->SetStart( start );
             arc->SetMid( mid );
             arc->SetEnd( end );
@@ -1032,15 +1045,15 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>&       i1B,
             ALLEGRO::T_15<magic>* i15 = static_cast<ALLEGRO::T_15<magic>*>( m_ptrs[k] );
 
             VECTOR2D start, end;
-            start.x = scale( i15->coords[0] );
-            start.y = scale( -i15->coords[1] );
-            end.x = scale( i15->coords[2] );
-            end.y = scale( -i15->coords[3] );
+            start.x = Scale( i15->coords[0] );
+            start.y = Scale( -i15->coords[1] );
+            end.x = Scale( i15->coords[2] );
+            end.y = Scale( -i15->coords[3] );
 
             std::unique_ptr<PCB_TRACK> track = std::make_unique<PCB_TRACK>( m_board );
 
             track->SetLayer( EtchLayerToKi( i05.layer ) );
-            track->SetWidth( scale( i15->width ) );
+            track->SetWidth( Scale( i15->width ) );
             track->SetStart( start );
             track->SetEnd( end );
             track->SetNet( netinfo );
@@ -1054,15 +1067,15 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>&       i1B,
             ALLEGRO::T_16<magic>* i16 = static_cast<ALLEGRO::T_16<magic>*>( m_ptrs[k] );
 
             VECTOR2D start, end;
-            start.x = scale( i16->coords[0] );
-            start.y = scale( -i16->coords[1] );
-            end.x = scale( i16->coords[2] );
-            end.y = scale( -i16->coords[3] );
+            start.x = Scale( i16->coords[0] );
+            start.y = Scale( -i16->coords[1] );
+            end.x = Scale( i16->coords[2] );
+            end.y = Scale( -i16->coords[3] );
 
             std::unique_ptr<PCB_TRACK> track = std::make_unique<PCB_TRACK>( m_board );
 
             track->SetLayer( EtchLayerToKi( i05.layer ) );
-            track->SetWidth( scale( i16->width ) );
+            track->SetWidth( Scale( i16->width ) );
             track->SetStart( start );
             track->SetEnd( end );
             track->SetNet( netinfo );
@@ -1076,15 +1089,15 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>&       i1B,
             ALLEGRO::T_17<magic>* i17 = static_cast<ALLEGRO::T_17<magic>*>( m_ptrs[k] );
 
             VECTOR2D start, end;
-            start.x = scale( i17->coords[0] );
-            start.y = scale( -i17->coords[1] );
-            end.x = scale( i17->coords[2] );
-            end.y = scale( -i17->coords[3] );
+            start.x = Scale( i17->coords[0] );
+            start.y = Scale( -i17->coords[1] );
+            end.x = Scale( i17->coords[2] );
+            end.y = Scale( -i17->coords[3] );
 
             std::unique_ptr<PCB_TRACK> track = std::make_unique<PCB_TRACK>( m_board );
 
             track->SetLayer( EtchLayerToKi( i05.layer ) );
-            track->SetWidth( scale( i17->width ) );
+            track->SetWidth( Scale( i17->width ) );
             track->SetStart( start );
             track->SetEnd( end );
             track->SetNet( netinfo );
@@ -1354,10 +1367,10 @@ SHAPE_LINE_CHAIN ALLEGRO_PARSER<magic>::ShapeStartingAt( uint32_t* k )
             ALLEGRO::T_01<magic>* i01 = static_cast<ALLEGRO::T_01<magic>*>( m_ptrs[*k] );
 
             VECTOR2I start, end, center, mid;
-            start.x = scale( i01->coords[0] );
-            start.y = scale( -i01->coords[1] );
-            end.x = scale( i01->coords[2] );
-            end.y = scale( -i01->coords[3] );
+            start.x = Scale( i01->coords[0] );
+            start.y = Scale( -i01->coords[1] );
+            end.x = Scale( i01->coords[2] );
+            end.y = Scale( -i01->coords[3] );
 
             if( first )
             {
@@ -1372,10 +1385,10 @@ SHAPE_LINE_CHAIN ALLEGRO_PARSER<magic>::ShapeStartingAt( uint32_t* k )
             ALLEGRO::T_15<magic>* i15 = static_cast<ALLEGRO::T_15<magic>*>( m_ptrs[*k] );
 
             VECTOR2D start, end;
-            start.x = scale( i15->coords[0] );
-            start.y = scale( -i15->coords[1] );
-            end.x = scale( i15->coords[2] );
-            end.y = scale( -i15->coords[3] );
+            start.x = Scale( i15->coords[0] );
+            start.y = Scale( -i15->coords[1] );
+            end.x = Scale( i15->coords[2] );
+            end.y = Scale( -i15->coords[3] );
 
             if( first )
             {
@@ -1390,10 +1403,10 @@ SHAPE_LINE_CHAIN ALLEGRO_PARSER<magic>::ShapeStartingAt( uint32_t* k )
             ALLEGRO::T_16<magic>* i16 = static_cast<ALLEGRO::T_16<magic>*>( m_ptrs[*k] );
 
             VECTOR2D start, end;
-            start.x = scale( i16->coords[0] );
-            start.y = scale( -i16->coords[1] );
-            end.x = scale( i16->coords[2] );
-            end.y = scale( -i16->coords[3] );
+            start.x = Scale( i16->coords[0] );
+            start.y = Scale( -i16->coords[1] );
+            end.x = Scale( i16->coords[2] );
+            end.y = Scale( -i16->coords[3] );
 
             if( first )
             {
@@ -1408,10 +1421,10 @@ SHAPE_LINE_CHAIN ALLEGRO_PARSER<magic>::ShapeStartingAt( uint32_t* k )
             ALLEGRO::T_17<magic>* i17 = static_cast<ALLEGRO::T_17<magic>*>( m_ptrs[*k] );
 
             VECTOR2D start, end;
-            start.x = scale( i17->coords[0] );
-            start.y = scale( -i17->coords[1] );
-            end.x = scale( i17->coords[2] );
-            end.y = scale( -i17->coords[3] );
+            start.x = Scale( i17->coords[0] );
+            start.y = Scale( -i17->coords[1] );
+            end.x = Scale( i17->coords[2] );
+            end.y = Scale( -i17->coords[3] );
 
             if( first )
             {
@@ -1443,6 +1456,12 @@ PCB_LAYER_ID ALLEGRO_PARSER<magic>::EtchLayerToKi( uint8_t a_layer )
     {
         return (PCB_LAYER_ID) ( ( (int) F_Cu ) + a_layer );
     }
+}
+
+template <ALLEGRO::MAGIC magic>
+double ALLEGRO_PARSER<magic>::Scale( double a_allegroValue )
+{
+    return a_allegroValue * m_scaleFactor;
 }
 
 template <ALLEGRO::MAGIC magic>

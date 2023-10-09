@@ -54,6 +54,12 @@ typedef struct
     uint32_t y;
 } CADENCE_FP;
 
+enum class BRD_UNITS : uint8_t
+{
+    IMPERIAL = 0x01,
+    METRIC = 0x03,
+};
+
 struct HEADER
 {
     uint32_t magic;
@@ -87,16 +93,26 @@ struct HEADER
     LL_PTRS  ll_x21;
     LL_PTRS  ll_unused_4;
     LL_PTRS  ll_x0A;
-    uint32_t un5;
+    uint32_t un3;
     char     allegro_version[60];
-    uint32_t un6;
+    uint32_t un4;
     uint32_t max_key;
-    uint32_t un7[20];
+    uint32_t un5[17];
+
+    BRD_UNITS units;
+    uint8_t   un6;
+    uint16_t  un7;
+
+    uint32_t un8[2];
     uint32_t x27_end_offset;
-    uint32_t un8;
+    uint32_t un9;
     uint32_t strings_count;
-    uint32_t un9[166];
+    uint32_t un10[53];
+    uint32_t unit_divisor;
+    uint32_t un11[112];
 };
+
+static_assert( offsetof( HEADER, unit_divisor ) == 620 );
 
 // Curved line segment
 template <MAGIC magic>
