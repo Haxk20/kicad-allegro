@@ -14,6 +14,7 @@
 #include <wx/log.h>
 
 #include <board.h>
+#include <geometry/eda_angle.h>
 #include <footprint.h>
 #include <layer_ids.h>
 #include <lib_id.h>
@@ -1025,15 +1026,14 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>&       i1B,
             end.y = Scale( -i01->coords[3] );
             center.x = Scale( (int32_t) cfp_to_double( i01->x ) );
             center.y = Scale( -(int32_t) cfp_to_double( i01->y ) );
-            mid = CalcArcMid( start, end, center );
 
-            std::unique_ptr<PCB_ARC> arc = std::make_unique<PCB_ARC>( m_board );
+            SHAPE_ARC shape_arc;
+            shape_arc.ConstructFromStartEndCenter( start, end, center, i01->subtype == 0x00, 0 );
+
+            std::unique_ptr<PCB_ARC> arc = std::make_unique<PCB_ARC>( m_board, &shape_arc );
 
             arc->SetLayer( EtchLayerToKi( i05.layer ) );
             arc->SetWidth( Scale( i01->width ) );
-            arc->SetStart( start );
-            arc->SetMid( mid );
-            arc->SetEnd( end );
             arc->SetNet( netinfo );
 
             m_board->Add( arc.release(), ADD_MODE::APPEND );
@@ -1371,12 +1371,17 @@ SHAPE_LINE_CHAIN ALLEGRO_PARSER<magic>::ShapeStartingAt( uint32_t* k )
             start.y = Scale( -i01->coords[1] );
             end.x = Scale( i01->coords[2] );
             end.y = Scale( -i01->coords[3] );
+            center.x = Scale( (int32_t) cfp_to_double( i01->x ) );
+            center.y = Scale( -(int32_t) cfp_to_double( i01->y ) );
+
+            SHAPE_ARC arc;
+            arc.ConstructFromStartEndCenter( start, end, center, i01->subtype == 0x00, 0 );
 
             if( first )
             {
                 chain.Append( start );
             }
-            chain.Append( end );
+            chain.Append( arc );
 
             *k = i01->next;
         }
