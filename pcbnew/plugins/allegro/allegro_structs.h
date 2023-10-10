@@ -412,11 +412,11 @@ struct T_0D
     uint32_t t;
     uint32_t k;
     uint32_t str_ptr;
-    uint32_t ptr2;      // Points to a random different `x0D`?
-    int32_t  coords[2]; // Relative to symbol origin
+    uint32_t ptr2; // Points to a random different `x0D`?
     COND_FIELD( magic >= A_174, uint32_t, un3 );
-    uint32_t pad_ptr; // Points to `x1C`
-    uint32_t un1;     // Always null?
+    int32_t  coords[2]; // Relative to symbol origin
+    uint32_t pad_ptr;   // Points to `x1C`
+    uint32_t un1;       // Always null?
     COND_FIELD( magic >= A_172, uint32_t, un2 );
     uint32_t bitmask;
     uint32_t rotation;
