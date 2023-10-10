@@ -44,6 +44,7 @@ private:
     void    AddFootprint( const ALLEGRO::T_2B<magic>& i2B );
     void    AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i32 );
     void    AddTrack( const ALLEGRO::T_1B<magic>& i1B, const ALLEGRO::T_05_TRACK<magic>& i05 );
+    void    AddVia( const ALLEGRO::T_33<magic>& i33 );
     void    AddZone( const std::optional<ALLEGRO::T_1B<magic>>& i1B,
                      const ALLEGRO::T_28_ZONE<magic>&           i28 );
 
@@ -1114,6 +1115,24 @@ void ALLEGRO_PARSER<magic>::AddTrack( const ALLEGRO::T_1B<magic>&       i1B,
 }
 
 template <ALLEGRO::MAGIC magic>
+void ALLEGRO_PARSER<magic>::AddVia( const ALLEGRO::T_33<magic>& i33 )
+{
+    std::unique_ptr<PCB_VIA> via = std::make_unique<PCB_VIA>( m_board );
+    via->SetPosition( VECTOR2D( Scale( i33.coords[0] ), Scale( -i33.coords[1] ) ) );
+
+    // Find net information
+    if( IsType( i33.ptr1, 0x04 ) )
+    {
+        const ALLEGRO::T_04<magic>* i04 = static_cast<ALLEGRO::T_04<magic>*>( m_ptrs[i33.ptr1] );
+
+        NETINFO_ITEM* netinfo = NetInfo( *i04 );
+        via->SetNet( netinfo );
+    }
+
+    m_board->Add( via.release(), ADD_MODE::APPEND );
+}
+
+template <ALLEGRO::MAGIC magic>
 void ALLEGRO_PARSER<magic>::AddZone( const std::optional<ALLEGRO::T_1B<magic>>& i1B,
                                      const ALLEGRO::T_28_ZONE<magic>&           i28 )
 {
@@ -1204,11 +1223,12 @@ void ALLEGRO_PARSER<magic>::BuildBoard()
                     {
                         if( IsType( k, 0x33 ) )
                         {
-                            ALLEGRO::T_33<magic>* i =
+                            ALLEGRO::T_33<magic>* i33 =
                                     static_cast<ALLEGRO::T_33<magic>*>( m_ptrs[k] );
                             // auto& i = fs->get_x33( k );
                             // printf("- - Found x33 w/ key = 0x %08X\n", ntohl(k));
-                            k = i->un1;
+                            AddVia( *i33 );
+                            k = i33->un1;
                         }
                         else if( IsType( k, 0x32 ) )
                         {
