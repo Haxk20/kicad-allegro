@@ -969,6 +969,7 @@ void ALLEGRO_PARSER<magic>::AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i
     center.x = Scale( i0D->coords[0] );
     center.y = Scale( -i0D->coords[1] );
     pad->SetPosition( center );
+    pad->SetOrientationDegrees( i0D->rotation / 1000. );
 
     std::optional<wxString> pad_number = StringLookup( i0D->str_ptr );
     if( pad_number )
@@ -989,7 +990,6 @@ void ALLEGRO_PARSER<magic>::AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i
                                      + ALLEGRO::sizeof_allegro_obj<ALLEGRO::T_1C<magic>>() );
 
     pad->SetSize( VECTOR2I( Scale( first_t13->w ), Scale( first_t13->h ) ) );
-    pad->SetOrientationDegrees( i0D->rotation / 1000. );
 
     switch( first_t13->t )
     {
