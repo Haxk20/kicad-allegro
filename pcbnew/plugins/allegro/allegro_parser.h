@@ -923,10 +923,6 @@ void ALLEGRO_PARSER<magic>::AddFootprint( const ALLEGRO::T_2B<magic>& i2B )
         }
 
         // Draw pads
-        // Note: The order of this code relative to the above positioning code
-        // is important. `AddPad` assumes the footprint is already in the
-        // correct position. Calling `SetPosition` on the footprint moves the
-        // pads.
         uint32_t k_pad = i2D->first_pad_ptr;
         while( IsType( k_pad, 0x32 ) )
         {
@@ -950,12 +946,6 @@ template <ALLEGRO::MAGIC magic>
 void ALLEGRO_PARSER<magic>::AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i32 )
 {
     std::unique_ptr<PAD> pad = std::make_unique<PAD>( fp );
-
-    // Let's deal with SMD pads first
-    pad->SetAttribute( PAD_ATTRIB::SMD );
-
-    pad->SetLayer( F_Cu );
-    pad->SetLayerSet( LSET( 1, F_Cu ) );
 
     // Find net information
     if( IsType( i32.ptr1, 0x04 ) )
@@ -984,6 +974,21 @@ void ALLEGRO_PARSER<magic>::AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i
     }
 
     const ALLEGRO::T_1C<magic>* i1C = static_cast<ALLEGRO::T_1C<magic>*>( m_ptrs[i0D->pad_ptr] );
+
+    switch( i1C->pad_info.pad_type )
+    {
+    case ALLEGRO::SmtPin:
+        pad->SetAttribute( PAD_ATTRIB::SMD );
+        pad->SetLayer( F_Cu );
+        pad->SetLayerSet( LSET( 1, F_Cu ) );
+        break;
+    case ALLEGRO::ThroughVia:
+        pad->SetAttribute( PAD_ATTRIB::PTH );
+        pad->SetLayer( F_Cu );
+        pad->SetLayerSet( LSET::AllCuMask() );
+        break;
+    default: wxLogMessage( "Unknown pad type %d", i1C->pad_info.pad_type );
+    }
 
     // FIXME: The list of pads immediately follows i1C in memory. This is an
     // ugly hack to get that address, though.
