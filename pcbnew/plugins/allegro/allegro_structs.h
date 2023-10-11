@@ -1221,12 +1221,20 @@ struct T_30
 };
 
 // String graphic
+enum class STR_LAYER : uint8_t
+{
+    BOT_PIN_NUM = 246,
+    TOP_PIN_NUM = 247,
+    BOT_REFDES = 250,
+    TOP_REFDES = 251,
+};
+
 template <MAGIC magic>
 struct T_31
 {
-    uint16_t t;
-    uint8_t  subtype;
-    uint8_t  layer;
+    uint16_t  t;
+    uint8_t   subtype;
+    STR_LAYER layer;
 
     uint32_t k;
 
@@ -1241,8 +1249,6 @@ struct T_31
     COND_FIELD( magic >= A_174, uint32_t, un2 );
 
     uint32_t TAIL;
-
-    std::string s;
 };
 
 // Symbol pins

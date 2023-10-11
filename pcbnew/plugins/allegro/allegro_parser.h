@@ -922,6 +922,61 @@ void ALLEGRO_PARSER<magic>::AddFootprint( const ALLEGRO::T_2B<magic>& i2B )
             fp->SetReference( "UNKNOWN123" );
         }
 
+        uint32_t k_text = i2D->ptr3;
+        while( true )
+        {
+            if( IsType( k_text, 0x30 ) )
+            {
+                ALLEGRO::T_30<magic>* i30 = static_cast<ALLEGRO::T_30<magic>*>( m_ptrs[k_text] );
+                ALLEGRO::T_31<magic>* i31 =
+                        static_cast<ALLEGRO::T_31<magic>*>( m_ptrs[i30->str_graphic_ptr] );
+
+                const char* s = (char*) ( &i31->TAIL );
+
+                if( strlen( s ) == 0 )
+                {
+                    wxLogMessage( "%s: empty string", *refdes );
+                }
+                else
+                {
+                    wxLogMessage( "%s T_30.k=%08X T_31.k=%08X \"%s\"", *refdes, ntohl( i30->k ),
+                                  ntohl( i31->k ), s );
+
+                    PCB_LAYER_ID layer = User_2;
+
+                    // FIXME: This probably needs to be flipped relative to the placement
+                    switch( i31->layer )
+                    {
+                    case ALLEGRO::STR_LAYER::BOT_PIN_NUM: layer = B_SilkS; break;
+                    case ALLEGRO::STR_LAYER::TOP_PIN_NUM: layer = F_SilkS; break;
+                    case ALLEGRO::STR_LAYER::BOT_REFDES: layer = B_SilkS; break;
+                    case ALLEGRO::STR_LAYER::TOP_REFDES: layer = F_SilkS; break;
+                    }
+
+                    std::unique_ptr<PCB_TEXT> t = std::make_unique<PCB_TEXT>( &*fp );
+                    t->SetLayer( layer );
+                    t->SetPosition( VECTOR2I( Scale( i31->coords[0] - i2D->coords[0] ),
+                                              Scale( -i31->coords[1] + i2D->coords[1] ) ) );
+                    t->SetText( wxString( s ) );
+                    fp->Add( t.release(), ADD_MODE::APPEND );
+                }
+
+                k_text = i30->next;
+            }
+            else if( IsType( k_text, 0x03 ) )
+            {
+                ALLEGRO::T_03<magic>* i03 = static_cast<ALLEGRO::T_03<magic>*>( m_ptrs[k_text] );
+                wxLogMessage( "%s T_03.k=%08X", *refdes, ntohl( i03->k ) );
+                k_text = i03->next;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        fp->AddField( PCB_FIELD( &*fp, -1, "ABC" ) );
+
         // Draw pads
         uint32_t k_pad = i2D->first_pad_ptr;
         while( IsType( k_pad, 0x32 ) )
