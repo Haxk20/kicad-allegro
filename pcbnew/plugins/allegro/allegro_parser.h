@@ -43,6 +43,7 @@ private:
     void    AddAnnotation( const ALLEGRO::T_14<magic>& i14 );
     void    AddFootprint( const ALLEGRO::T_2B<magic>& i2B );
     void    AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i32 );
+    void    AddText( BOARD_ITEM_CONTAINER& aContainer, const ALLEGRO::T_30<magic>& i30 );
     void    AddTrack( const ALLEGRO::T_1B<magic>& i1B, const ALLEGRO::T_05_TRACK<magic>& i05 );
     void    AddVia( const ALLEGRO::T_33<magic>& i33 );
     void    AddZone( const std::optional<ALLEGRO::T_1B<magic>>& i1B,
@@ -922,45 +923,18 @@ void ALLEGRO_PARSER<magic>::AddFootprint( const ALLEGRO::T_2B<magic>& i2B )
             fp->SetReference( "UNKNOWN123" );
         }
 
+        // Position the object
+        fp->SetPosition( VECTOR2I( Scale( i2D->coords[0] ), Scale( -i2D->coords[1] ) ) );
+        fp->SetOrientationDegrees( i2D->rotation / 1000. );
+        fp->SetLayerAndFlip( i2D->layer == 0 ? F_Cu : B_Cu );
+
         uint32_t k_text = i2D->ptr3;
         while( true )
         {
             if( IsType( k_text, 0x30 ) )
             {
                 ALLEGRO::T_30<magic>* i30 = static_cast<ALLEGRO::T_30<magic>*>( m_ptrs[k_text] );
-                ALLEGRO::T_31<magic>* i31 =
-                        static_cast<ALLEGRO::T_31<magic>*>( m_ptrs[i30->str_graphic_ptr] );
-
-                const char* s = (char*) ( &i31->TAIL );
-
-                if( strlen( s ) == 0 )
-                {
-                    wxLogMessage( "%s: empty string", *refdes );
-                }
-                else
-                {
-                    wxLogMessage( "%s T_30.k=%08X T_31.k=%08X \"%s\"", *refdes, ntohl( i30->k ),
-                                  ntohl( i31->k ), s );
-
-                    PCB_LAYER_ID layer = User_2;
-
-                    // FIXME: This probably needs to be flipped relative to the placement
-                    switch( i31->layer )
-                    {
-                    case ALLEGRO::STR_LAYER::BOT_PIN_NUM: layer = B_SilkS; break;
-                    case ALLEGRO::STR_LAYER::TOP_PIN_NUM: layer = F_SilkS; break;
-                    case ALLEGRO::STR_LAYER::BOT_REFDES: layer = B_SilkS; break;
-                    case ALLEGRO::STR_LAYER::TOP_REFDES: layer = F_SilkS; break;
-                    }
-
-                    std::unique_ptr<PCB_TEXT> t = std::make_unique<PCB_TEXT>( &*fp );
-                    t->SetLayer( layer );
-                    t->SetPosition( VECTOR2I( Scale( i31->coords[0] - i2D->coords[0] ),
-                                              Scale( -i31->coords[1] + i2D->coords[1] ) ) );
-                    t->SetText( wxString( s ) );
-                    fp->Add( t.release(), ADD_MODE::APPEND );
-                }
-
+                AddText( *fp, *i30 );
                 k_text = i30->next;
             }
             else if( IsType( k_text, 0x03 ) )
@@ -985,11 +959,6 @@ void ALLEGRO_PARSER<magic>::AddFootprint( const ALLEGRO::T_2B<magic>& i2B )
             AddPad( &*fp, *i32 );
             k_pad = i32->next;
         }
-
-        // Position the object
-        fp->SetPosition( VECTOR2I( Scale( i2D->coords[0] ), Scale( -i2D->coords[1] ) ) );
-        fp->SetOrientationDegrees( i2D->rotation / 1000. );
-        fp->SetLayerAndFlip( i2D->layer == 0 ? F_Cu : B_Cu );
 
         k = i2D->next;
 
@@ -1062,6 +1031,42 @@ void ALLEGRO_PARSER<magic>::AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i
     }
 
     fp->Add( pad.release(), ADD_MODE::APPEND );
+}
+
+template <ALLEGRO::MAGIC magic>
+void ALLEGRO_PARSER<magic>::AddText( BOARD_ITEM_CONTAINER&       aContainer,
+                                     const ALLEGRO::T_30<magic>& i30 )
+{
+    ALLEGRO::T_31<magic>* i31 = static_cast<ALLEGRO::T_31<magic>*>( m_ptrs[i30.str_graphic_ptr] );
+
+    const char* s = (char*) ( &i31->TAIL );
+
+    if( strlen( s ) == 0 )
+    {
+        wxLogMessage( "empty string" );
+    }
+    else
+    {
+        wxLogMessage( "T_30.k=%08X T_31.k=%08X %04X \"%s\"", ntohl( i30.k ), ntohl( i31->k ),
+                      i31->layer, s );
+
+        PCB_LAYER_ID layer = User_2;
+
+        // FIXME: This probably needs to be flipped relative to the placement
+        switch( i31->layer )
+        {
+        case ALLEGRO::STR_LAYER::TOP_TEXT:
+        case ALLEGRO::STR_LAYER::TOP_PIN:
+        case ALLEGRO::STR_LAYER::TOP_REFDES: layer = User_4; break;
+        }
+
+        std::unique_ptr<PCB_TEXT> t = std::make_unique<PCB_TEXT>( &aContainer );
+        t->SetLayer( layer );
+        t->SetPosition( VECTOR2I( Scale( i30.coords[0] ), Scale( -i30.coords[1] ) ) );
+        t->Rotate( t->GetPosition(), EDA_ANGLE( i30.rotation / 1000., DEGREES_T ) );
+        t->SetText( wxString( s ) );
+        aContainer.Add( t.release(), ADD_MODE::APPEND );
+    }
 }
 
 template <ALLEGRO::MAGIC magic>
@@ -1396,6 +1401,30 @@ void ALLEGRO_PARSER<magic>::BuildBoard()
             auto i2B = static_cast<ALLEGRO::T_2B<magic>*>( m_ptrs[k] );
             AddFootprint( *i2B );
             k = i2B->next;
+        }
+    }
+
+    k = m_header->ll_x03_x30.head;
+    if( k != 0 )
+    {
+        while( k != m_header->ll_x03_x30.tail )
+        {
+            if( IsType( k, 0x30 ) )
+            {
+                ALLEGRO::T_30<magic>* i30 = static_cast<ALLEGRO::T_30<magic>*>( m_ptrs[k] );
+                AddText( *m_board, *i30 );
+                k = i30->next;
+            }
+            else if( IsType( k, 0x03 ) )
+            {
+                ALLEGRO::T_03<magic>* i03 = static_cast<ALLEGRO::T_03<magic>*>( m_ptrs[k] );
+                k = i03->next;
+            }
+            else
+            {
+                wxLogMessage( "Unexpected type in ll_x03_x30" );
+                break;
+            }
         }
     }
 }

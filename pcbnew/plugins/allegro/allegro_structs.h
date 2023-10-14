@@ -1221,19 +1221,17 @@ struct T_30
 };
 
 // String graphic
-enum class STR_LAYER : uint8_t
+enum class STR_LAYER : uint16_t
 {
-    BOT_PIN_NUM = 246,
-    TOP_PIN_NUM = 247,
-    BOT_REFDES = 250,
-    TOP_REFDES = 251,
+    TOP_TEXT = 0xF101,
+    TOP_PIN = 0xF709,
+    TOP_REFDES = 0xFB0D,
 };
 
 template <MAGIC magic>
 struct T_31
 {
     uint16_t  t;
-    uint8_t   subtype;
     STR_LAYER layer;
 
     uint32_t k;
