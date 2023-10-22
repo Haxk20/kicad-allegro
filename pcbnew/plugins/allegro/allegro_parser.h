@@ -937,6 +937,15 @@ void ALLEGRO_PARSER<magic>::AddFootprint( const ALLEGRO::T_2B<magic>& i2B )
             fp->SetReference( "A0" );
         }
 
+        // Draw pads
+        uint32_t k_pad = i2D->first_pad_ptr;
+        while( IsType( k_pad, 0x32 ) )
+        {
+            ALLEGRO::T_32<magic>* i32 = static_cast<ALLEGRO::T_32<magic>*>( m_ptrs[k_pad] );
+            AddPad( &*fp, *i32 );
+            k_pad = i32->next;
+        }
+
         // Position the object
         fp->SetPosition( VECTOR2I( Scale( i2D->coords[0] ), Scale( -i2D->coords[1] ) ) );
         fp->SetOrientationDegrees( i2D->rotation / 1000. );
@@ -992,15 +1001,6 @@ void ALLEGRO_PARSER<magic>::AddFootprint( const ALLEGRO::T_2B<magic>& i2B )
 
         fp->AddField( PCB_FIELD( &*fp, -1, "ABC" ) );
 
-        // Draw pads
-        uint32_t k_pad = i2D->first_pad_ptr;
-        while( IsType( k_pad, 0x32 ) )
-        {
-            ALLEGRO::T_32<magic>* i32 = static_cast<ALLEGRO::T_32<magic>*>( m_ptrs[k_pad] );
-            AddPad( &*fp, *i32 );
-            k_pad = i32->next;
-        }
-
         k = i2D->next;
 
         m_board->Add( fp.release(), ADD_MODE::APPEND );
@@ -1052,7 +1052,7 @@ void ALLEGRO_PARSER<magic>::AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i
         pad->SetLayer( F_Cu );
         pad->SetLayerSet( LSET::AllCuMask() );
         break;
-    default: wxLogMessage( "Unknown pad type %d", i1C->pad_info.pad_type );
+        // default: wxLogMessage( "Unknown pad type %d", i1C->pad_info.pad_type );
     }
 
     // FIXME: The list of pads immediately follows i1C in memory. This is an
