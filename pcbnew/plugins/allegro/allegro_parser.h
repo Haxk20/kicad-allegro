@@ -1245,23 +1245,10 @@ void ALLEGRO_PARSER<magic>::AddZone( BOARD_ITEM_CONTAINER&                      
                                      const std::optional<ALLEGRO::T_1B<magic>>& i1B,
                                      const ALLEGRO::T_28_ZONE<magic>&           i28 )
 {
-    std::unique_ptr<ZONE> zone = std::make_unique<ZONE>( &aContainer );
-    zone->SetZoneName( wxString::Format( "x28: 0x%08X", ntohl( i28.k ) ) );
-    zone->SetLocalClearance( 0 );
-    zone->SetMinThickness( 0 );
+    uint32_t k = i28.first_segment_ptr;
 
-    uint32_t       k = i28.first_segment_ptr;
-    SHAPE_POLY_SET outline;
-
-    SHAPE_LINE_CHAIN chain = ShapeStartingAt( &k );
-    zone->AddPolygon( chain );
-    // outline.AddOutline( chain );
-
-    // wxLogMessage( "Handling x28 0x%08X, subtype = 0x%02X", ntohl( i28.k ), i28.subtype );
-    // if( i28.k == 0x0001B814 )
-    // {
-    //     wxLogMessage( "***" );
-    // }
+    std::unique_ptr<SHAPE_POLY_SET> outline = std::make_unique<SHAPE_POLY_SET>();
+    outline->AddOutline( ShapeStartingAt( &k ) );
 
     uint32_t hole_k = i28.ptr4;
     while( IsType( hole_k, 0x34 ) )
@@ -1274,7 +1261,8 @@ void ALLEGRO_PARSER<magic>::AddZone( BOARD_ITEM_CONTAINER&                      
         if( hole_chain.PointCount() >= 3 )
         {
             hole_chain.SetClosed( true );
-            zone->AddPolygon( hole_chain );
+            // zone->AddPolygon( hole_chain );
+            outline->AddHole( hole_chain );
         }
         else
         {
@@ -1283,9 +1271,17 @@ void ALLEGRO_PARSER<magic>::AddZone( BOARD_ITEM_CONTAINER&                      
         hole_k = i34->next;
     }
 
+
     if( i28.subtype == ALLEGRO::ZONE_TYPE_NET )
     {
+        std::unique_ptr<ZONE> zone = std::make_unique<ZONE>( &aContainer );
+        zone->SetZoneName( wxString::Format( "x28: 0x%08X", ntohl( i28.k ) ) );
+        zone->SetLocalClearance( 0 );
+        zone->SetMinThickness( 0 );
+        zone->SetOutline( outline.release() );
+
         PCB_LAYER_ID layer = (PCB_LAYER_ID) ( ( (int) F_Cu ) + i28.layer );
+
         zone->SetLayer( layer );
 
         if( i1B )
@@ -1300,15 +1296,21 @@ void ALLEGRO_PARSER<magic>::AddZone( BOARD_ITEM_CONTAINER&                      
     }
     else if( i28.subtype == ALLEGRO::ZONE_TYPE_SILK )
     {
+        std::unique_ptr<PCB_SHAPE> shape =
+                std::make_unique<PCB_SHAPE>( &aContainer, SHAPE_T::POLY );
+        shape->SetPolyShape( *outline.release() );
+        shape->SetFilled( true );
+
         if( i28.layer == 0xFD )
         {
-            zone->SetLayer( F_SilkS );
+            shape->SetLayer( F_SilkS );
         }
         else
         {
-            zone->SetLayer( User_3 );
+            shape->SetLayer( User_3 );
         }
-        aContainer.Add( zone.release(), ADD_MODE::APPEND );
+
+        aContainer.Add( shape.release(), ADD_MODE::APPEND );
     }
     /*
     else if( i28.subtype == ALLEGRO::ZONE_TYPE_TBD )
@@ -1325,8 +1327,8 @@ void ALLEGRO_PARSER<magic>::AddZone( BOARD_ITEM_CONTAINER&                      
     */
     else
     {
-        zone->SetLayer( User_3 );
-        aContainer.Add( zone.release(), ADD_MODE::APPEND );
+        // zone->SetLayer( User_3 );
+        // aContainer.Add( zone.release(), ADD_MODE::APPEND );
     }
 }
 
