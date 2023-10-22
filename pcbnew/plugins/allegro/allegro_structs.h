@@ -915,8 +915,9 @@ struct T_26
 // Shape
 enum ZONE_TYPE : uint8_t
 {
-    ZONE_TYPE_NET = 0x06,
     ZONE_TYPE_TBD = 0x01,
+    ZONE_TYPE_NET = 0x06,
+    ZONE_TYPE_SILK = 0x09,
 };
 
 template <MAGIC magic>

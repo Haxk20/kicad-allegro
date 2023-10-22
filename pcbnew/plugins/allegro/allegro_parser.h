@@ -40,14 +40,14 @@ public:
 private:
     void    BuildBoard();
     uint8_t GetCopperLayerCount();
-    void    AddAnnotation( const ALLEGRO::T_14<magic>& i14 );
+    void    AddAnnotation( BOARD_ITEM_CONTAINER& aContainer, const ALLEGRO::T_14<magic>& i14 );
     void    AddFootprint( const ALLEGRO::T_2B<magic>& i2B );
     void    AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i32 );
     void    AddText( BOARD_ITEM_CONTAINER& aContainer, const ALLEGRO::T_30<magic>& i30 );
     void    AddTrack( const ALLEGRO::T_1B<magic>& i1B, const ALLEGRO::T_05_TRACK<magic>& i05 );
     void    AddVia( const ALLEGRO::T_33<magic>& i33 );
-    void    AddZone( const std::optional<ALLEGRO::T_1B<magic>>& i1B,
-                     const ALLEGRO::T_28_ZONE<magic>&           i28 );
+    void AddZone( BOARD_ITEM_CONTAINER& aContainer, const std::optional<ALLEGRO::T_1B<magic>>& i1B,
+                  const ALLEGRO::T_28_ZONE<magic>& i28 );
 
     void                    Skip( std::size_t n );
     void                    Log( const char* fmt... );
@@ -793,11 +793,25 @@ uint8_t ALLEGRO_PARSER<magic>::GetCopperLayerCount()
 }
 
 template <ALLEGRO::MAGIC magic>
-void ALLEGRO_PARSER<magic>::AddAnnotation( const ALLEGRO::T_14<magic>& i14 )
+void ALLEGRO_PARSER<magic>::AddAnnotation( BOARD_ITEM_CONTAINER&       aContainer,
+                                           const ALLEGRO::T_14<magic>& i14 )
 {
     PCB_LAYER_ID layer = User_1;
-    uint32_t     k = i14.ptr2;
 
+    if( i14.subtype == 0x9 && i14.layer == 246 )
+    {
+        layer = B_SilkS;
+    }
+    if( i14.subtype == 0x9 && i14.layer == 247 )
+    {
+        layer = F_SilkS;
+    }
+    else if( i14.subtype == 0x1 && i14.layer == 241 )
+    {
+        layer = F_SilkS;
+    }
+
+    uint32_t k = i14.ptr2;
     while( true )
     {
         if( IsType( k, 0x01 ) )
@@ -815,13 +829,13 @@ void ALLEGRO_PARSER<magic>::AddAnnotation( const ALLEGRO::T_14<magic>& i14 )
             center.y = Scale( -(int32_t) cfp_to_double( i01->y ) );
             mid = CalcArcMid( start, end, center );
 
-            PCB_SHAPE* arc = new PCB_SHAPE( m_board, SHAPE_T::ARC );
+            PCB_SHAPE* arc = new PCB_SHAPE( &aContainer, SHAPE_T::ARC );
 
             arc->SetLayer( layer );
             arc->SetWidth( Scale( i01->width ) );
             arc->SetArcGeometry( start, mid, end );
 
-            m_board->Add( arc, ADD_MODE::APPEND );
+            aContainer.Add( arc, ADD_MODE::APPEND );
 
             k = i01->next;
         }
@@ -835,14 +849,14 @@ void ALLEGRO_PARSER<magic>::AddAnnotation( const ALLEGRO::T_14<magic>& i14 )
             end.x = Scale( i15->coords[2] );
             end.y = Scale( -i15->coords[3] );
 
-            PCB_SHAPE* segment = new PCB_SHAPE( m_board, SHAPE_T::SEGMENT );
+            PCB_SHAPE* segment = new PCB_SHAPE( &aContainer, SHAPE_T::SEGMENT );
 
             segment->SetLayer( layer );
             segment->SetWidth( Scale( i15->width ) );
             segment->SetStart( start );
             segment->SetEnd( end );
 
-            m_board->Add( segment, ADD_MODE::APPEND );
+            aContainer.Add( segment, ADD_MODE::APPEND );
 
             k = i15->next;
         }
@@ -856,14 +870,14 @@ void ALLEGRO_PARSER<magic>::AddAnnotation( const ALLEGRO::T_14<magic>& i14 )
             end.x = Scale( i16->coords[2] );
             end.y = Scale( -i16->coords[3] );
 
-            PCB_SHAPE* segment = new PCB_SHAPE( m_board, SHAPE_T::SEGMENT );
+            PCB_SHAPE* segment = new PCB_SHAPE( &aContainer, SHAPE_T::SEGMENT );
 
             segment->SetLayer( layer );
             segment->SetWidth( Scale( i16->width ) );
             segment->SetStart( start );
             segment->SetEnd( end );
 
-            m_board->Add( segment, ADD_MODE::APPEND );
+            aContainer.Add( segment, ADD_MODE::APPEND );
 
             k = i16->next;
         }
@@ -877,14 +891,14 @@ void ALLEGRO_PARSER<magic>::AddAnnotation( const ALLEGRO::T_14<magic>& i14 )
             end.x = Scale( i17->coords[2] );
             end.y = Scale( -i17->coords[3] );
 
-            PCB_SHAPE* segment = new PCB_SHAPE( m_board, SHAPE_T::SEGMENT );
+            PCB_SHAPE* segment = new PCB_SHAPE( &aContainer, SHAPE_T::SEGMENT );
 
             segment->SetLayer( layer );
             segment->SetWidth( Scale( i17->width ) );
             segment->SetStart( start );
             segment->SetEnd( end );
 
-            m_board->Add( segment, ADD_MODE::APPEND );
+            aContainer.Add( segment, ADD_MODE::APPEND );
 
             k = i17->next;
         }
@@ -920,7 +934,7 @@ void ALLEGRO_PARSER<magic>::AddFootprint( const ALLEGRO::T_2B<magic>& i2B )
         }
         else
         {
-            fp->SetReference( "UNKNOWN123" );
+            fp->SetReference( "A0" );
         }
 
         // Position the object
@@ -928,6 +942,23 @@ void ALLEGRO_PARSER<magic>::AddFootprint( const ALLEGRO::T_2B<magic>& i2B )
         fp->SetOrientationDegrees( i2D->rotation / 1000. );
         fp->SetLayerAndFlip( i2D->layer == 0 ? F_Cu : B_Cu );
 
+        // Add annotations
+        uint32_t k_marking = i2D->ptr1;
+        while( true )
+        {
+            if( IsType( k_marking, 0x14 ) )
+            {
+                ALLEGRO::T_14<magic>* i14 = static_cast<ALLEGRO::T_14<magic>*>( m_ptrs[k_marking] );
+                AddAnnotation( *fp, *i14 );
+                k_marking = i14->next;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        // Add text
         uint32_t k_text = i2D->ptr3;
         while( true )
         {
@@ -940,13 +971,23 @@ void ALLEGRO_PARSER<magic>::AddFootprint( const ALLEGRO::T_2B<magic>& i2B )
             else if( IsType( k_text, 0x03 ) )
             {
                 ALLEGRO::T_03<magic>* i03 = static_cast<ALLEGRO::T_03<magic>*>( m_ptrs[k_text] );
-                wxLogMessage( "%s T_03.k=%08X", *refdes, ntohl( i03->k ) );
+                // wxLogMessage( "%s T_03.k=%08X", *refdes, ntohl( i03->k ) );
                 k_text = i03->next;
             }
             else
             {
                 break;
             }
+        }
+
+        // Add zones
+        uint32_t k_shape = i2D->ptr4[1];
+        while( IsType( k_shape, 0x28 ) )
+        {
+            ALLEGRO::T_28_ZONE<magic>* i28 =
+                    static_cast<ALLEGRO::T_28_ZONE<magic>*>( m_ptrs[k_shape] );
+            AddZone( *fp, {}, *i28 );
+            k_shape = i28->ptr5;
         }
 
         fp->AddField( PCB_FIELD( &*fp, -1, "ABC" ) );
@@ -1026,8 +1067,10 @@ void ALLEGRO_PARSER<magic>::AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i
     {
     case 0x02: pad->SetShape( PAD_SHAPE::CIRCLE ); break;
     case 0x05:
-    case 0x06: pad->SetShape( PAD_SHAPE::RECTANGLE ); break;
-    default: wxLogMessage( "Unrecognized type on %s: t=%d", fp->GetReference(), first_t13->t );
+    case 0x06:
+        pad->SetShape( PAD_SHAPE::RECTANGLE );
+        break;
+        // default: wxLogMessage( "Unrecognized type on %s: t=%d", fp->GetReference(), first_t13->t );
     }
 
     fp->Add( pad.release(), ADD_MODE::APPEND );
@@ -1043,12 +1086,12 @@ void ALLEGRO_PARSER<magic>::AddText( BOARD_ITEM_CONTAINER&       aContainer,
 
     if( strlen( s ) == 0 )
     {
-        wxLogMessage( "empty string" );
+        // wxLogMessage( "empty string" );
     }
     else
     {
-        wxLogMessage( "T_30.k=%08X T_31.k=%08X %04X \"%s\"", ntohl( i30.k ), ntohl( i31->k ),
-                      i31->layer, s );
+        // wxLogMessage( "T_30.k=%08X T_31.k=%08X %04X \"%s\"", ntohl( i30.k ), ntohl( i31->k ),
+        //               i31->layer, s );
 
         PCB_LAYER_ID layer = User_2;
 
@@ -1198,10 +1241,11 @@ void ALLEGRO_PARSER<magic>::AddVia( const ALLEGRO::T_33<magic>& i33 )
 }
 
 template <ALLEGRO::MAGIC magic>
-void ALLEGRO_PARSER<magic>::AddZone( const std::optional<ALLEGRO::T_1B<magic>>& i1B,
+void ALLEGRO_PARSER<magic>::AddZone( BOARD_ITEM_CONTAINER&                      aContainer,
+                                     const std::optional<ALLEGRO::T_1B<magic>>& i1B,
                                      const ALLEGRO::T_28_ZONE<magic>&           i28 )
 {
-    std::unique_ptr<ZONE> zone = std::make_unique<ZONE>( m_board );
+    std::unique_ptr<ZONE> zone = std::make_unique<ZONE>( &aContainer );
     zone->SetZoneName( wxString::Format( "x28: 0x%08X", ntohl( i28.k ) ) );
     zone->SetLocalClearance( 0 );
     zone->SetMinThickness( 0 );
@@ -1252,9 +1296,23 @@ void ALLEGRO_PARSER<magic>::AddZone( const std::optional<ALLEGRO::T_1B<magic>>& 
 
         // zone->SetFilledPolysList( layer, outline );
 
-        m_board->Add( zone.release(), ADD_MODE::APPEND );
+        aContainer.Add( zone.release(), ADD_MODE::APPEND );
     }
+    else if( i28.subtype == ALLEGRO::ZONE_TYPE_SILK )
+    {
+        if( i28.layer == 0xFD )
+        {
+            zone->SetLayer( F_SilkS );
+        }
+        else
+        {
+            zone->SetLayer( User_3 );
+        }
+        aContainer.Add( zone.release(), ADD_MODE::APPEND );
+    }
+    /*
     else if( i28.subtype == ALLEGRO::ZONE_TYPE_TBD )
+
     {
         // PCB_LAYER_ID layer = (PCB_LAYER_ID) ( ( (int) F_Cu ) + i28.layer );
         zone->SetLayer( F_Cu );
@@ -1262,7 +1320,13 @@ void ALLEGRO_PARSER<magic>::AddZone( const std::optional<ALLEGRO::T_1B<magic>>& 
         // zone->SetIsRuleArea( true );
         // zone->SetDoNotAllowCopperPour( true );
 
-        // m_board->Add( zone.release(), ADD_MODE::APPEND );
+        aContainer.Add( zone.release(), ADD_MODE::APPEND );
+    }
+    */
+    else
+    {
+        zone->SetLayer( User_3 );
+        aContainer.Add( zone.release(), ADD_MODE::APPEND );
     }
 }
 
@@ -1313,7 +1377,7 @@ void ALLEGRO_PARSER<magic>::BuildBoard()
                         {
                             ALLEGRO::T_28_ZONE<magic>* i28 =
                                     static_cast<ALLEGRO::T_28_ZONE<magic>*>( m_ptrs[k] );
-                            AddZone( *i, *i28 );
+                            AddZone( *m_board, *i, *i28 );
 
                             k = i28->ptr5;
                         }
@@ -1371,7 +1435,7 @@ void ALLEGRO_PARSER<magic>::BuildBoard()
             else if( IsType( k, 0x28 ) )
             {
                 auto i28 = static_cast<ALLEGRO::T_28_ZONE<magic>*>( m_ptrs[k] );
-                AddZone( {}, *i28 );
+                AddZone( *m_board, {}, *i28 );
                 k = i28->ptr5;
             }
             else
@@ -1388,7 +1452,7 @@ void ALLEGRO_PARSER<magic>::BuildBoard()
         while( k != m_header->ll_x14.tail )
         {
             auto i14 = static_cast<ALLEGRO::T_14<magic>*>( m_ptrs[k] );
-            AddAnnotation( *i14 );
+            AddAnnotation( *m_board, *i14 );
             k = i14->next;
         }
     }
