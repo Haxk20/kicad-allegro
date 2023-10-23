@@ -42,10 +42,12 @@ private:
     uint8_t GetCopperLayerCount();
     void    AddAnnotation( BOARD_ITEM_CONTAINER& aContainer, const ALLEGRO::T_14<magic>& i14 );
     void    AddFootprint( const ALLEGRO::T_2B<magic>& i2B );
-    void    AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i32 );
-    void    AddText( BOARD_ITEM_CONTAINER& aContainer, const ALLEGRO::T_30<magic>& i30 );
-    void    AddTrack( const ALLEGRO::T_1B<magic>& i1B, const ALLEGRO::T_05_TRACK<magic>& i05 );
-    void    AddVia( const ALLEGRO::T_33<magic>& i33 );
+
+    void AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i32 );
+
+    void AddText( BOARD_ITEM_CONTAINER& aContainer, const ALLEGRO::T_30<magic>& i30 );
+    void AddTrack( const ALLEGRO::T_1B<magic>& i1B, const ALLEGRO::T_05_TRACK<magic>& i05 );
+    void AddVia( const ALLEGRO::T_33<magic>& i33 );
     void AddZone( BOARD_ITEM_CONTAINER& aContainer, const std::optional<ALLEGRO::T_1B<magic>>& i1B,
                   const ALLEGRO::T_28_ZONE<magic>& i28 );
 
@@ -58,6 +60,10 @@ private:
     SHAPE_LINE_CHAIN        ShapeStartingAt( uint32_t* k );
     PCB_LAYER_ID            EtchLayerToKi( uint8_t a_layer );
     double                  Scale( double a_allegroValue );
+
+    constexpr uint32_t             GetPadComponentCount( const ALLEGRO::T_1C<magic>& i1C );
+    constexpr ALLEGRO::t13<magic>* GetPadComponent( const ALLEGRO::T_1C<magic>& i1C, uint32_t idx );
+    void                           SetPadShape( PAD& pad, const ALLEGRO::t13<magic>& it13 );
 
     std::optional<wxString> RefdesLookup( const ALLEGRO::T_2D<magic>& i2D );
 
@@ -1048,32 +1054,39 @@ void ALLEGRO_PARSER<magic>::AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i
         pad->SetLayerSet( LSET( 1, F_Cu ) );
         break;
     case ALLEGRO::ThroughVia:
+    case ALLEGRO::Slot:
         pad->SetAttribute( PAD_ATTRIB::PTH );
         pad->SetLayer( F_Cu );
         pad->SetLayerSet( LSET::AllCuMask() );
         break;
-        // default: wxLogMessage( "Unknown pad type %d", i1C->pad_info.pad_type );
+    default: wxLogMessage( "Unknown pad type %d", i1C->pad_info.pad_type );
     }
 
-    // FIXME: The list of pads immediately follows i1C in memory. This is an
-    // ugly hack to get that address, though.
-    const ALLEGRO::t13<magic>* first_t13 =
-            (ALLEGRO::t13<magic>*) ( (char*) i1C
-                                     + ALLEGRO::sizeof_allegro_obj<ALLEGRO::T_1C<magic>>() );
-
-    pad->SetSize( VECTOR2I( Scale( first_t13->w ), Scale( first_t13->h ) ) );
-
-    switch( first_t13->t )
+    const uint32_t component_count = GetPadComponentCount( *i1C );
+    /*
+    wxLogMessage( "next pad, for 0x1C k=0x %08X", ntohl( i1C->k ) );
+    for( uint8_t i = 0; i < component_count; i++ )
     {
-    case 0x02: pad->SetShape( PAD_SHAPE::CIRCLE ); break;
-    case 0x05:
-    case 0x06:
-        pad->SetShape( PAD_SHAPE::RECTANGLE );
-        break;
-        // default: wxLogMessage( "Unrecognized type on %s: t=%d", fp->GetReference(), first_t13->t );
+        wxLogMessage( "%02d: t=0x%08X", i, GetPadComponent( *i1C, i )->t );
     }
+    */
 
+    uint8_t offset = 23;
+    if constexpr( magic < ALLEGRO::A_172 )
+    {
+        offset = 12;
+    }
+    SetPadShape( *pad, *GetPadComponent( *i1C, offset ) );
     fp->Add( pad.release(), ADD_MODE::APPEND );
+
+    std::unique_ptr<PAD> paste_pad = std::make_unique<PAD>( fp );
+    paste_pad->SetAttribute( PAD_ATTRIB::SMD );
+    paste_pad->SetLayer( F_Paste );
+    paste_pad->SetLayerSet( LSET( 1, F_Paste ) );
+    paste_pad->SetPosition( center );
+    paste_pad->SetOrientationDegrees( i0D->rotation / 1000. );
+    SetPadShape( *paste_pad, *GetPadComponent( *i1C, 0 ) ); // Where is paste layer?
+    fp->Add( paste_pad.release(), ADD_MODE::APPEND );
 }
 
 template <ALLEGRO::MAGIC magic>
@@ -1642,6 +1655,44 @@ template <ALLEGRO::MAGIC magic>
 double ALLEGRO_PARSER<magic>::Scale( double a_allegroValue )
 {
     return a_allegroValue * m_scaleFactor;
+}
+
+template <ALLEGRO::MAGIC magic>
+constexpr uint32_t ALLEGRO_PARSER<magic>::GetPadComponentCount( const ALLEGRO::T_1C<magic>& i1C )
+{
+    if( magic < ALLEGRO::A_172 )
+    {
+        return 10 + 3 * i1C.layer_count;
+    }
+    else
+    {
+        return 21 + 4 * i1C.layer_count;
+    }
+}
+
+template <ALLEGRO::MAGIC magic>
+void ALLEGRO_PARSER<magic>::SetPadShape( PAD& pad, const ALLEGRO::t13<magic>& it13 )
+{
+    pad.SetSize( VECTOR2I( Scale( it13.w ), Scale( it13.h ) ) );
+
+    switch( it13.t )
+    {
+    case 0x02: pad.SetShape( PAD_SHAPE::CIRCLE ); break;
+    case 0x05: pad.SetShape( PAD_SHAPE::RECTANGLE ); break;
+    case 0x0B:
+    case 0x0C:
+    case 0x06: pad.SetShape( PAD_SHAPE::ROUNDRECT ); break;
+    default: wxLogMessage( "Unrecognized type: t=%02X", it13.t );
+    }
+}
+
+template <ALLEGRO::MAGIC magic>
+constexpr ALLEGRO::t13<magic>*
+ALLEGRO_PARSER<magic>::GetPadComponent( const ALLEGRO::T_1C<magic>& i1C, uint32_t idx )
+{
+    return (ALLEGRO::t13<magic>*) ( (char*) &i1C
+                                    + ALLEGRO::sizeof_allegro_obj<ALLEGRO::T_1C<magic>>()
+                                    + ALLEGRO::sizeof_allegro_obj<ALLEGRO::t13<magic>>() * idx );
 }
 
 template <ALLEGRO::MAGIC magic>
