@@ -1085,7 +1085,12 @@ void ALLEGRO_PARSER<magic>::AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i
     paste_pad->SetLayerSet( LSET( 1, F_Paste ) );
     paste_pad->SetPosition( center );
     paste_pad->SetOrientationDegrees( i0D->rotation / 1000. );
-    SetPadShape( *paste_pad, *GetPadComponent( *i1C, 0 ) ); // Where is paste layer?
+    uint8_t paste_offset = 14;
+    if constexpr( magic < ALLEGRO::A_172 )
+    {
+        paste_offset = 5;
+    }
+    SetPadShape( *paste_pad, *GetPadComponent( *i1C, paste_offset ) ); // Where is paste layer?
     fp->Add( paste_pad.release(), ADD_MODE::APPEND );
 }
 
@@ -1678,10 +1683,10 @@ void ALLEGRO_PARSER<magic>::SetPadShape( PAD& pad, const ALLEGRO::t13<magic>& it
     switch( it13.t )
     {
     case 0x02: pad.SetShape( PAD_SHAPE::CIRCLE ); break;
-    case 0x05: pad.SetShape( PAD_SHAPE::RECTANGLE ); break;
+    case 0x05:
+    case 0x06: pad.SetShape( PAD_SHAPE::RECTANGLE ); break;
     case 0x0B:
-    case 0x0C:
-    case 0x06: pad.SetShape( PAD_SHAPE::ROUNDRECT ); break;
+    case 0x0C: pad.SetShape( PAD_SHAPE::ROUNDRECT ); break;
     default: wxLogMessage( "Unrecognized type: t=%02X", it13.t );
     }
 }
