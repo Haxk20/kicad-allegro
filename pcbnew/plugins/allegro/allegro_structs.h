@@ -670,21 +670,16 @@ struct T_1B
 template <MAGIC magic>
 struct t13
 {
-    uint32_t str_ptr; // Often null
     uint32_t t;
-
     COND_FIELD( magic >= A_172, uint32_t, z0 );
-
     int32_t w;
     int32_t h;
     int32_t x2;
     int32_t x3;
-
-    // This should be _after_ `x4`, but conditional fields at the end of
-    // the struct are flakey?
-    COND_FIELD( magic >= A_172, uint32_t, z );
-
     int32_t x4;
+    COND_FIELD( magic >= A_172, uint32_t, z );
+    uint32_t str_ptr; // Often null
+
 
     uint32_t TAIL;
 };
@@ -730,7 +725,7 @@ struct T_1C
     COND_FIELD( magic < A_172, uint16_t, un6 );
     uint16_t layer_count;
     COND_FIELD( magic >= A_172, uint16_t, un7 );
-    uint32_t un8[7];
+    uint32_t un8[8];
     COND_FIELD( magic >= A_172, uint32_t[28], un9 );
     COND_FIELD( magic == A_165 || magic == A_166, uint32_t[8], un10 );
 
@@ -738,9 +733,9 @@ struct T_1C
     std::vector<t13<magic>> parts;
 };
 
-static_assert( sizeof_allegro_obj<T_1C<A_164>>() == 20 * 4 );
-static_assert( sizeof_allegro_obj<T_1C<A_165>>() == 28 * 4 );
-static_assert( sizeof_allegro_obj<T_1C<A_172>>() == 47 * 4 );
+static_assert( sizeof_allegro_obj<T_1C<A_164>>() == 21 * 4 );
+static_assert( sizeof_allegro_obj<T_1C<A_165>>() == 29 * 4 );
+static_assert( sizeof_allegro_obj<T_1C<A_172>>() == 48 * 4 );
 
 static_assert( offsetof( T_1C<A_164>, layer_count ) == 50 );
 static_assert( offsetof( T_1C<A_172>, layer_count ) == 44 );
@@ -1226,6 +1221,7 @@ enum class STR_LAYER : uint16_t
 {
     TOP_TEXT = 0xF101,
     TOP_PIN = 0xF709,
+    TOP_PIN_LABEL = 0xF909,
     TOP_REFDES = 0xFB0D,
 };
 

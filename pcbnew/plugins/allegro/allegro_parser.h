@@ -430,16 +430,11 @@ uint32_t ALLEGRO_PARSER<magic>::Parse1C( ALLEGRO_PARSER<magic>& parser )
 
     if constexpr( magic >= ALLEGRO::A_172 )
     {
-        parser.Skip( 4 );
-    }
-
-    if constexpr( magic >= ALLEGRO::A_172 )
-    {
         parser.Skip( i->n * 40 );
     }
     else
     {
-        parser.Skip( i->n * 32 );
+        parser.Skip( i->n * 32 - 4 );
     }
 
     return k;
@@ -997,12 +992,24 @@ void ALLEGRO_PARSER<magic>::AddFootprint( const ALLEGRO::T_2B<magic>& i2B )
 
         // Add zones
         uint32_t k_shape = i2D->ptr4[1];
-        while( IsType( k_shape, 0x28 ) )
+        while( true )
         {
-            ALLEGRO::T_28_ZONE<magic>* i28 =
-                    static_cast<ALLEGRO::T_28_ZONE<magic>*>( m_ptrs[k_shape] );
-            AddZone( *fp, {}, *i28 );
-            k_shape = i28->ptr5;
+            if( IsType( k_shape, 0x28 ) )
+            {
+                ALLEGRO::T_28_ZONE<magic>* i28 =
+                        static_cast<ALLEGRO::T_28_ZONE<magic>*>( m_ptrs[k_shape] );
+                AddZone( *fp, {}, *i28 );
+                k_shape = i28->ptr5;
+            }
+            else if( IsType( k_shape, 0x0E ) )
+            {
+                auto i0E = static_cast<ALLEGRO::T_0E<magic>*>( m_ptrs[k_shape] );
+                k_shape = i0E->next;
+            }
+            else
+            {
+                break;
+            }
         }
 
         fp->AddField( PCB_FIELD( &*fp, -1, "ABC" ) );
@@ -1079,19 +1086,41 @@ void ALLEGRO_PARSER<magic>::AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i
     SetPadShape( *pad, *GetPadComponent( *i1C, offset ) );
     fp->Add( pad.release(), ADD_MODE::APPEND );
 
+    std::unique_ptr<PAD> mask_pad = std::make_unique<PAD>( fp );
+    mask_pad->SetAttribute( PAD_ATTRIB::SMD );
+    mask_pad->SetLayer( F_Mask );
+    mask_pad->SetLayerSet( LSET( 1, F_Mask ) );
+    mask_pad->SetPosition( center );
+    mask_pad->SetOrientationDegrees( i0D->rotation / 1000. );
+    uint8_t mask_offset = 14;
+    if constexpr( magic < ALLEGRO::A_172 )
+    {
+        mask_offset = 5;
+    }
+    SetPadShape( *mask_pad, *GetPadComponent( *i1C, mask_offset ) ); // Where is mask layer?
+    fp->Add( mask_pad.release(), ADD_MODE::APPEND );
+
     std::unique_ptr<PAD> paste_pad = std::make_unique<PAD>( fp );
     paste_pad->SetAttribute( PAD_ATTRIB::SMD );
     paste_pad->SetLayer( F_Paste );
     paste_pad->SetLayerSet( LSET( 1, F_Paste ) );
     paste_pad->SetPosition( center );
     paste_pad->SetOrientationDegrees( i0D->rotation / 1000. );
-    uint8_t paste_offset = 14;
+    uint8_t paste_offset = 16;
     if constexpr( magic < ALLEGRO::A_172 )
     {
-        paste_offset = 5;
+        paste_offset = 7;
     }
     SetPadShape( *paste_pad, *GetPadComponent( *i1C, paste_offset ) ); // Where is paste layer?
     fp->Add( paste_pad.release(), ADD_MODE::APPEND );
+
+    // Add label
+    // FIXME: This is positioned incorrectly.
+    // if( IsType( i32.ptr10, 0x30 ) )
+    // {
+    //     ALLEGRO::T_30<magic>* i30 = static_cast<ALLEGRO::T_30<magic>*>( m_ptrs[i32.ptr10] );
+    //     AddText( *fp, *i30 );
+    // }
 }
 
 template <ALLEGRO::MAGIC magic>
@@ -1119,6 +1148,7 @@ void ALLEGRO_PARSER<magic>::AddText( BOARD_ITEM_CONTAINER&       aContainer,
         case ALLEGRO::STR_LAYER::TOP_TEXT:
         case ALLEGRO::STR_LAYER::TOP_PIN:
         case ALLEGRO::STR_LAYER::TOP_REFDES: layer = User_4; break;
+        case ALLEGRO::STR_LAYER::TOP_PIN_LABEL: layer = User_5; break;
         }
 
         std::unique_ptr<PCB_TEXT> t = std::make_unique<PCB_TEXT>( &aContainer );
@@ -1323,8 +1353,66 @@ void ALLEGRO_PARSER<magic>::AddZone( BOARD_ITEM_CONTAINER&                      
         {
             shape->SetLayer( F_SilkS );
         }
+        else if( i28.layer == 0xEC )
+        {
+            shape->SetWidth( 0 );
+            shape->SetLayer( B_Paste );
+        }
+        else if( i28.layer == 0xED )
+        {
+            shape->SetWidth( 0 );
+            shape->SetLayer( F_Paste );
+        }
+        else if( i28.layer == 0xF6 )
+        {
+            shape->SetFilled( false );
+            shape->SetLayer( F_SilkS );
+        }
+        else if( i28.layer == 0xFA )
+        {
+            shape->SetLayer( B_CrtYd );
+        }
+        else if( i28.layer == 0xFB )
+        {
+            shape->SetLayer( F_CrtYd );
+        }
+        else if( i28.layer == 0xF3 )
+        {
+            shape->SetLayer( B_Paste );
+        }
+        else if( i28.layer == 0xF4 )
+        {
+            shape->SetLayer( F_Paste );
+        }
+        else if( i28.layer == 0xF7 )
+        {
+            shape->SetLayer( User_6 );
+        }
+        else if( i28.layer == 0xEE )
+        {
+            // What are these?
+            shape->SetFilled( false );
+            shape->SetLayer( User_7 );
+        }
+        else if( i28.layer == 0xEF )
+        {
+            // What are these?
+            shape->SetFilled( false );
+            shape->SetLayer( User_8 );
+        }
+        else if( i28.layer == 0x02 )
+        {
+            shape->SetFilled( false );
+            shape->SetLayer( Eco1_User );
+        }
+        else if( i28.layer == 0x00 )
+        {
+            shape->SetFilled( false );
+            shape->SetLayer( Eco2_User );
+        }
         else
         {
+            wxLogMessage( "Adding zone from 09.%02X", i28.layer );
             shape->SetLayer( User_3 );
         }
 
@@ -1678,8 +1766,6 @@ constexpr uint32_t ALLEGRO_PARSER<magic>::GetPadComponentCount( const ALLEGRO::T
 template <ALLEGRO::MAGIC magic>
 void ALLEGRO_PARSER<magic>::SetPadShape( PAD& pad, const ALLEGRO::t13<magic>& it13 )
 {
-    pad.SetSize( VECTOR2I( Scale( it13.w ), Scale( it13.h ) ) );
-
     switch( it13.t )
     {
     case 0x02: pad.SetShape( PAD_SHAPE::CIRCLE ); break;
@@ -1687,8 +1773,26 @@ void ALLEGRO_PARSER<magic>::SetPadShape( PAD& pad, const ALLEGRO::t13<magic>& it
     case 0x06: pad.SetShape( PAD_SHAPE::RECTANGLE ); break;
     case 0x0B:
     case 0x0C: pad.SetShape( PAD_SHAPE::ROUNDRECT ); break;
+    case 0x16: pad.SetShape( PAD_SHAPE::CUSTOM ); break;
     default: wxLogMessage( "Unrecognized type: t=%02X", it13.t );
     }
+
+    if( it13.t == 0x16 )
+    {
+        if( IsType( it13.str_ptr, 0x28 ) )
+        {
+            ALLEGRO::T_28_ZONE<magic>* i28 =
+                    static_cast<ALLEGRO::T_28_ZONE<magic>*>( m_ptrs[it13.str_ptr] );
+            uint32_t k = i28->first_segment_ptr;
+            pad.DeletePrimitivesList();
+            pad.AddPrimitivePoly( ShapeStartingAt( &k ), 0, true );
+        }
+    }
+    else
+    {
+        pad.SetSize( VECTOR2I( Scale( it13.w ), Scale( it13.h ) ) );
+    }
+    pad.Move( VECTOR2I( Scale( it13.x3 ), -Scale( it13.x4 ) ) );
 }
 
 template <ALLEGRO::MAGIC magic>
