@@ -674,18 +674,21 @@ struct t13
     COND_FIELD( magic >= A_172, uint32_t, z0 );
     int32_t w;
     int32_t h;
-    int32_t x2;
+    COND_FIELD( magic >= A_172, uint32_t, z1 );
     int32_t x3;
     int32_t x4;
     COND_FIELD( magic >= A_172, uint32_t, z );
     uint32_t str_ptr; // Often null
-
+    COND_FIELD( magic < A_172, uint32_t, z2 );
 
     uint32_t TAIL;
 };
 
 static_assert( sizeof_allegro_obj<t13<A_160>>() == 28 );
 static_assert( sizeof_allegro_obj<t13<A_174>>() == 36 );
+
+static_assert( offsetof( t13<A_164>, str_ptr ) == 20 );
+static_assert( offsetof( t13<A_174>, str_ptr ) == 32 );
 
 // x1C shows how to draw pads
 enum PAD_TYPE : uint8_t

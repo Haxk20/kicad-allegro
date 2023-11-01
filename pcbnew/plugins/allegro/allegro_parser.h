@@ -13,6 +13,7 @@
 
 #include <wx/log.h>
 
+#include <base_units.h>
 #include <board.h>
 #include <geometry/eda_angle.h>
 #include <footprint.h>
@@ -1052,6 +1053,7 @@ void ALLEGRO_PARSER<magic>::AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i
     }
 
     const ALLEGRO::T_1C<magic>* i1C = static_cast<ALLEGRO::T_1C<magic>*>( m_ptrs[i0D->pad_ptr] );
+    // wxLogMessage( "i1C.k = 0x %08X", ntohl( i1C->k ) );
 
     switch( i1C->pad_info.pad_type )
     {
@@ -1069,12 +1071,13 @@ void ALLEGRO_PARSER<magic>::AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i
     default: wxLogMessage( "Unknown pad type %d", i1C->pad_info.pad_type );
     }
 
-    const uint32_t component_count = GetPadComponentCount( *i1C );
     /*
-    wxLogMessage( "next pad, for 0x1C k=0x %08X", ntohl( i1C->k ) );
+    const uint32_t component_count = GetPadComponentCount( *i1C );
+    // wxLogMessage( "next pad, for 0x1C k=0x %08X", ntohl( i1C->k ) );
     for( uint8_t i = 0; i < component_count; i++ )
     {
-        wxLogMessage( "%02d: t=0x%08X", i, GetPadComponent( *i1C, i )->t );
+        ALLEGRO::t13<magic>* c = GetPadComponent( *i1C, i );
+        wxLogMessage( "%02d: t=0x%08X, ptr=0x%08X", i, c->t, ntohl( c->str_ptr ) );
     }
     */
 
@@ -1083,36 +1086,48 @@ void ALLEGRO_PARSER<magic>::AddPad( FOOTPRINT* fp, const ALLEGRO::T_32<magic>& i
     {
         offset = 12;
     }
-    SetPadShape( *pad, *GetPadComponent( *i1C, offset ) );
-    fp->Add( pad.release(), ADD_MODE::APPEND );
+    ALLEGRO::t13<magic>* comp = GetPadComponent( *i1C, offset );
+    if( comp->t != 0 )
+    {
+        SetPadShape( *pad, *comp );
+        fp->Add( pad.release(), ADD_MODE::APPEND );
+    }
 
-    std::unique_ptr<PAD> mask_pad = std::make_unique<PAD>( fp );
-    mask_pad->SetAttribute( PAD_ATTRIB::SMD );
-    mask_pad->SetLayer( F_Mask );
-    mask_pad->SetLayerSet( LSET( 1, F_Mask ) );
-    mask_pad->SetPosition( center );
-    mask_pad->SetOrientationDegrees( i0D->rotation / 1000. );
     uint8_t mask_offset = 14;
     if constexpr( magic < ALLEGRO::A_172 )
     {
         mask_offset = 5;
     }
-    SetPadShape( *mask_pad, *GetPadComponent( *i1C, mask_offset ) ); // Where is mask layer?
-    fp->Add( mask_pad.release(), ADD_MODE::APPEND );
+    comp = GetPadComponent( *i1C, mask_offset );
+    if( comp->t != 0 )
+    {
+        std::unique_ptr<PAD> mask_pad = std::make_unique<PAD>( fp );
+        mask_pad->SetAttribute( PAD_ATTRIB::SMD );
+        mask_pad->SetLayer( F_Mask );
+        mask_pad->SetLayerSet( LSET( 1, F_Mask ) );
+        mask_pad->SetPosition( center );
+        mask_pad->SetOrientationDegrees( i0D->rotation / 1000. );
+        SetPadShape( *mask_pad, *comp );
+        fp->Add( mask_pad.release(), ADD_MODE::APPEND );
+    }
 
-    std::unique_ptr<PAD> paste_pad = std::make_unique<PAD>( fp );
-    paste_pad->SetAttribute( PAD_ATTRIB::SMD );
-    paste_pad->SetLayer( F_Paste );
-    paste_pad->SetLayerSet( LSET( 1, F_Paste ) );
-    paste_pad->SetPosition( center );
-    paste_pad->SetOrientationDegrees( i0D->rotation / 1000. );
     uint8_t paste_offset = 16;
     if constexpr( magic < ALLEGRO::A_172 )
     {
         paste_offset = 7;
     }
-    SetPadShape( *paste_pad, *GetPadComponent( *i1C, paste_offset ) ); // Where is paste layer?
-    fp->Add( paste_pad.release(), ADD_MODE::APPEND );
+    comp = GetPadComponent( *i1C, paste_offset );
+    if( comp->t != 0 )
+    {
+        std::unique_ptr<PAD> paste_pad = std::make_unique<PAD>( fp );
+        paste_pad->SetAttribute( PAD_ATTRIB::SMD );
+        paste_pad->SetLayer( F_Paste );
+        paste_pad->SetLayerSet( LSET( 1, F_Paste ) );
+        paste_pad->SetPosition( center );
+        paste_pad->SetOrientationDegrees( i0D->rotation / 1000. );
+        SetPadShape( *paste_pad, *comp );
+        fp->Add( paste_pad.release(), ADD_MODE::APPEND );
+    }
 
     // Add label
     // FIXME: This is positioned incorrectly.
@@ -1786,6 +1801,14 @@ void ALLEGRO_PARSER<magic>::SetPadShape( PAD& pad, const ALLEGRO::t13<magic>& it
             uint32_t k = i28->first_segment_ptr;
             pad.DeletePrimitivesList();
             pad.AddPrimitivePoly( ShapeStartingAt( &k ), 0, true );
+
+            // FIXME: Set the fake pad to a very small size
+            pad.SetSize( VECTOR2I( pcbIUScale.MilsToIU( 1 ), pcbIUScale.MilsToIU( 1 ) ) );
+        }
+        else
+        {
+            wxLogMessage( "Weird case?, str_ptr = 0x %08X, count = %d", ntohl( it13.str_ptr ),
+                          m_ptrs.count( it13.str_ptr ) );
         }
     }
     else
